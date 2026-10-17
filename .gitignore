@@ -1,0 +1,8 @@
+# Build output
+dist/
+*.app
+*.exe
+/gltools
+
+# macOS
+.DS_Store

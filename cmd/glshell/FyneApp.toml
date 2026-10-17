@@ -1,0 +1,6 @@
+[Details]
+Icon = "assets/icon.png"
+Name = "GL Shell"
+ID = "local.glshell"
+Version = "1.0.0"
+Build = 24

@@ -1,0 +1,6 @@
+.idea
+.DS_Store
+
+cmd/fyneterm/fyneterm*
+cmd/fyneterm/FyneTerm*
+
