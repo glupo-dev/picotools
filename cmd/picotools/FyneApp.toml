@@ -1,0 +1,6 @@
+[Details]
+Icon = "assets/icon.png"
+Name = "Pico Tools"
+ID = "local.picotools"
+Version = "1.0.0"
+Build = 167

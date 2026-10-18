@@ -648,11 +648,11 @@ func escapeScrollUp(t *Terminal, msg string) {
 		lines = 1
 	}
 
-	// GL Tools: SU (scroll up) must not move the cursor. The original code moved it up
+	// Pico Tools: SU (scroll up) must not move the cursor. The original code moved it up
 	// by the same number of lines, so on Windows (ConPTY uses SU when the output fills
 	// the screen) the next prompt was written in the middle of the previous output.
 
-	// GL Tools: keep the lines leaving the top of the screen, as for normal scrolling.
+	// Pico Tools: keep the lines leaving the top of the screen, as for normal scrolling.
 	if t.scrollTop == 0 && !t.altBufferActive {
 		for i := 0; i < lines && i <= t.scrollBottom && i < len(t.content.Rows); i++ {
 			t.keepScrollback(t.content.Rows[i])

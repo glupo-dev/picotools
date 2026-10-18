@@ -362,7 +362,7 @@ func (t *Terminal) scrollDown() {
 		return
 	}
 	if t.scrollTop == 0 && !t.altBufferActive && len(t.content.Rows) > 0 {
-		t.keepScrollback(t.content.Rows[0]) // GL Tools: keep the line leaving the screen
+		t.keepScrollback(t.content.Rows[0]) // Pico Tools: keep the line leaving the screen
 	}
 	i := t.scrollTop
 	for ; i < t.scrollBottom && i < len(t.content.Rows)-1; i++ {

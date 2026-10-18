@@ -28,7 +28,7 @@ const (
 // FullScreenKey is the key shown in the hints to switch full screen on and off.
 var FullScreenKey = "F11"
 
-// ConsoleApp is an app made of text screens driven by the keyboard, such as GL Tools.
+// ConsoleApp is an app made of text screens driven by the keyboard, such as Pico Tools.
 // It knows nothing about the window: the Screen gives it the keys and draws what it renders.
 type ConsoleApp interface {
 	Key(k string) // one of the Key... names

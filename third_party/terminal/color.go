@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	// GL Tools: brighter standard colors, readable on a dark background.
+	// Pico Tools: brighter standard colors, readable on a dark background.
 	basicColors = []color.Color{
 		&color.RGBA{0x5C, 0x63, 0x70, 255},
 		&color.RGBA{0xE0, 0x6C, 0x75, 255},

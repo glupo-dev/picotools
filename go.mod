@@ -1,4 +1,4 @@
-module gltools
+module picotools
 
 go 1.27.2
 

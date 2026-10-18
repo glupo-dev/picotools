@@ -2,7 +2,7 @@ package terminal
 
 import "fyne.io/fyne/v2/widget"
 
-// GL Tools: scrollback support. Lines that leave the top of the screen are kept here,
+// Pico Tools: scrollback support. Lines that leave the top of the screen are kept here,
 // so that the application can show them again when the user scrolls back.
 
 // maxScrollback is the number of lines kept.

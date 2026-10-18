@@ -2,7 +2,7 @@
 dist/
 *.app
 *.exe
-/gltools
+/picotools
 
 # macOS
 .DS_Store

@@ -105,7 +105,7 @@ type Terminal struct {
 	connected, stopping    bool
 	readWriterConfigurator ReadWriterConfigurator
 
-	// GL Tools: lines scrolled off the top of the screen, oldest first (see scrollback.go).
+	// Pico Tools: lines scrolled off the top of the screen, oldest first (see scrollback.go).
 	scrollback     []widget.TextGridRow
 	scrollbackLock sync.Mutex
 }

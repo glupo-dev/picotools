@@ -1,4 +1,4 @@
-// Package gui holds what the GL apps share: the dark console look, the text area
+// Package gui holds what the Pico apps share: the dark console look, the text area
 // with mouse selection and the window that opens maximized.
 package gui
 
