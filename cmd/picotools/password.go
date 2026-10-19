@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"math/big"
@@ -33,6 +34,8 @@ var passwordLevels = []passwordLevel{
 	{"API key", 40, func() string { return randomPassword(40, []string{lower, upper, digits}) }},
 	// 256 bit secret, like "openssl rand -hex 32" (JWT, cookies, webhooks, encryption keys).
 	{"Hex secret", 64, func() string { return hex.EncodeToString(randomBytes(32)) }},
+	// Same 256 bits in base64url without padding: shorter and URL safe (PKCE, JWK, tokens in links).
+	{"B64 secret", 43, func() string { return base64.RawURLEncoding.EncodeToString(randomBytes(32)) }},
 	{"UUID v4", 36, uuidV4},
 	{"UUID v7", 36, uuidV7},
 }
