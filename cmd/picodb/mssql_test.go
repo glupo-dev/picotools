@@ -121,3 +121,13 @@ func TestPickInLongList(t *testing.T) {
 		t.Errorf("short list: %d %v", i, ok)
 	}
 }
+
+func TestLocalDBPipe(t *testing.T) {
+	info := "Name:               MSSQLLocalDB\r\nVersion:            15.0.4153.1\r\nStatus:             Wird ausgeführt\r\nInstanz-Pipename:   np:\\\\.\\pipe\\LOCALDB#5E8D3C2A\\tsql\\query\r\n"
+	if got, want := localDBPipe(info), `np:\\.\pipe\LOCALDB#5E8D3C2A\tsql\query`; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if got := localDBPipe("Status: Stopped\r\nInstance pipe name: \r\n"); got != "" {
+		t.Errorf("stopped instance: got %q", got)
+	}
+}

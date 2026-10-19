@@ -58,6 +58,9 @@ func (sqlServer) open(s, database string) (*sql.DB, error) {
 	if database != "" {
 		cfg.Database = database
 	}
+	if err := useLocalDB(&cfg); err != nil {
+		return nil, err
+	}
 	return sql.OpenDB(mssql.NewConnectorConfig(cfg)), nil
 }
 
