@@ -152,6 +152,8 @@ func (m *model) Key(k string) {
 		switch k {
 		case gui.KeyUp, gui.KeyDown:
 			m.tableCursor = move(m.tableCursor, k, len(m.tables))
+		case gui.KeyPageUp, gui.KeyPageDown:
+			m.tableCursor = page(m.tableCursor, k == gui.KeyPageDown, m.listRoom(), len(m.tables))
 		case gui.KeyEnter:
 			m.number = ""
 			m.openTable(m.tableCursor)
@@ -243,7 +245,9 @@ func (m *model) Rune(r rune) {
 		}
 
 	case screenTables:
-		if i, ok := m.pick(r, &m.tableCursor, len(m.tables)); ok {
+		if r == 'n' || r == 'p' {
+			m.tableCursor = page(m.tableCursor, r == 'n', m.listRoom(), len(m.tables))
+		} else if i, ok := m.pick(r, &m.tableCursor, len(m.tables)); ok {
 			m.openTable(i)
 		}
 
@@ -310,6 +314,14 @@ func move(cursor int, k string, n int) int {
 		return (cursor - 1 + n) % n
 	}
 	return (cursor + 1) % n
+}
+
+// page takes the cursor one page down (or up) in a list of n entries, stopping at the ends.
+func page(cursor int, down bool, room, n int) int {
+	if down {
+		return max(min(cursor+room, n-1), 0)
+	}
+	return max(cursor-room, 0)
 }
 
 // pick handles a digit typed in a list of n entries. Up to 9 entries the digit opens

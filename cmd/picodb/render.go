@@ -169,7 +169,7 @@ func (m *model) renderTables() []line {
 		}
 	}
 	lines = append(lines, m.entries(labels, details, m.tableCursor)...)
-	return append(lines, m.footer("↑/↓ move · enter open · "+m.pickHint(len(m.tables))+" · esc back")...)
+	return append(lines, m.footer("↑/↓ move · n/p or pgdn/pgup page · enter open · "+m.pickHint(len(m.tables))+" · esc back")...)
 }
 
 // viewRoom is how many rows of the viewer fit: the window less the title (4 lines),
