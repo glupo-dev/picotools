@@ -28,7 +28,11 @@ func (m *model) Render(cols, rows int) []line {
 	case screenTables:
 		lines = append(lines, m.renderTables()...)
 	case screenTable:
-		lines = append(lines, m.renderViewer("1 show CREATE TABLE · 2 select all · ↑/↓ scroll · esc back")...)
+		fav := "3 add to favourites"
+		if m.isFavourite(m.table.full()) {
+			fav = "3 remove from favourites"
+		}
+		lines = append(lines, m.renderViewer("1 show CREATE TABLE · 2 select all · "+fav+" · ↑/↓ scroll · esc back")...)
 	case screenCreate:
 		lines = append(lines, m.renderViewer("c copy · s save · ↑/↓ scroll · pgup/pgdn page · esc back")...)
 	case screenData:
@@ -68,8 +72,9 @@ func (m *model) listRoom() int {
 }
 
 // entries draws a list with the selected one marked, scrolled to keep it in view.
-// Each entry is its label (padded to the same width) and a detail in grey.
-func (m *model) entries(labels, details []string, cursor int) []line {
+// Each entry is its label (padded to the same width) and a detail in grey; a marked
+// entry has an asterisk after its number.
+func (m *model) entries(labels, details []string, marked []bool, cursor int) []line {
 	width := 0
 	for _, l := range labels {
 		width = max(width, len([]rune(l)))
@@ -85,11 +90,15 @@ func (m *model) entries(labels, details []string, cursor int) []line {
 	for i := start; i < end; i++ {
 		num := fmt.Sprintf("%*d", numWidth, i+1)
 		label := fmt.Sprintf("%-*s", width, labels[i])
+		gap := "  "
+		if marked != nil && marked[i] {
+			gap = "* "
+		}
 		detail := gui.Truncate(details[i], m.cols-width-numWidth-10)
 		if i == cursor {
-			lines = append(lines, line{gui.Strong("› "+num+"  "+label, gui.Accent), gui.Colored("   "+detail, gui.Muted)}.Highlighted(m.cols-2))
+			lines = append(lines, line{gui.Strong("› "+num+gap+label, gui.Accent), gui.Colored("   "+detail, gui.Muted)}.Highlighted(m.cols-2))
 		} else {
-			lines = append(lines, line{gui.Plain("  "), gui.Strong(num, gui.Accent), gui.Plain("  " + label), gui.Colored("   "+detail, gui.Muted)})
+			lines = append(lines, line{gui.Plain("  "), gui.Strong(num+gap[:1], gui.Accent), gui.Plain(gap[1:] + label), gui.Colored("   "+detail, gui.Muted)})
 		}
 	}
 	if end < len(labels) {
@@ -130,7 +139,7 @@ func (m *model) renderConnections() []line {
 	if len(cs) == 0 {
 		lines = append(lines, line{gui.Colored("No connections yet: press n to add the first one.", gui.Muted)})
 	}
-	lines = append(lines, m.entries(labels, details, m.connCursor)...)
+	lines = append(lines, m.entries(labels, details, nil, m.connCursor)...)
 	lines = append(lines, nil, line{gui.Plain("  "), gui.Strong("n", gui.Accent), gui.Plain("  new connection")})
 	hint := "n new · esc quit"
 	if len(cs) > 0 {
@@ -144,32 +153,45 @@ func (m *model) renderDatabases() []line {
 	if len(m.dbs) == 0 {
 		lines = append(lines, line{gui.Colored("No databases this user can open.", gui.Muted)})
 	}
-	lines = append(lines, m.entries(m.dbs, make([]string, len(m.dbs)), m.dbCursor)...)
+	lines = append(lines, m.entries(m.dbs, make([]string, len(m.dbs)), nil, m.dbCursor)...)
 	return append(lines, m.footer("↑/↓ move · enter open · "+m.pickHint(len(m.dbs))+" · esc back")...)
 }
 
 func (m *model) renderMenu() []line {
 	lines := []line{{gui.Strong(m.crumbs(), nil), gui.Colored("   "+m.info, gui.Muted)}, nil}
-	lines = append(lines, m.entries([]string{"Tables"}, []string{""}, m.menuCursor)...)
+	lines = append(lines, m.entries([]string{"Tables"}, []string{""}, nil, m.menuCursor)...)
 	return append(lines, m.footer("↑/↓ move · enter open · number quick pick · esc back")...)
 }
 
 func (m *model) renderTables() []line {
-	lines := []line{{gui.Strong(m.crumbs()+" › Tables", nil), gui.Colored(fmt.Sprintf("   %d tables", len(m.tables)), gui.Muted)}, nil}
-	if len(m.tables) == 0 {
-		lines = append(lines, line{gui.Colored("No tables in this database.", gui.Muted)})
+	shown := m.shownTables()
+	info, toggle := fmt.Sprintf("   %d tables", len(m.tables)), "f only favourites"
+	if m.favOnly {
+		info, toggle = fmt.Sprintf("   %d favourites of %d tables", len(shown), len(m.tables)), "f all tables"
 	}
-	labels := make([]string, len(m.tables))
-	details := make([]string, len(m.tables))
-	for i, t := range m.tables {
+	lines := []line{{gui.Strong(m.crumbs()+" › Tables", nil), gui.Colored(info, gui.Muted)}, nil}
+	switch {
+	case len(m.tables) == 0:
+		lines = append(lines, line{gui.Colored("No tables in this database.", gui.Muted)})
+	case len(shown) == 0:
+		lines = append(lines, line{gui.Colored("No favourites yet: open a table and press 3 to add it.", gui.Muted)})
+	}
+	labels := make([]string, len(shown))
+	details := make([]string, len(shown))
+	marked := make([]bool, len(shown))
+	for i, j := range shown {
+		t := m.tables[j]
 		labels[i] = t.full()
+		if !m.favOnly && m.isFavourite(t.full()) {
+			marked[i] = true
+		}
 		details[i] = thousands(t.Rows) + " rows"
 		if t.Rows == 1 {
 			details[i] = "1 row"
 		}
 	}
-	lines = append(lines, m.entries(labels, details, m.tableCursor)...)
-	return append(lines, m.footer("↑/↓ move · n/p or pgdn/pgup page · enter open · "+m.pickHint(len(m.tables))+" · esc back")...)
+	lines = append(lines, m.entries(labels, details, marked, m.tableCursor)...)
+	return append(lines, m.footer("↑/↓ move · n/p or pgdn/pgup page · enter open · "+m.pickHint(len(shown))+" · "+toggle+" · esc back")...)
 }
 
 // viewRoom is how many rows of the viewer fit: the window less the title (4 lines),

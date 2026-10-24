@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -46,6 +47,7 @@ type model struct {
 	dbCursor    int
 	menuCursor  int
 	tableCursor int
+	favOnly     bool   // the tables list shows only the favourites
 	number      string // digits typed to pick an entry of a long list
 
 	conn       *Connection
@@ -150,16 +152,17 @@ func (m *model) Key(k string) {
 		}
 
 	case screenTables:
+		n := len(m.shownTables())
 		switch k {
 		case gui.KeyUp, gui.KeyDown:
-			m.tableCursor = move(m.tableCursor, k, len(m.tables))
+			m.tableCursor = move(m.tableCursor, k, n)
 		case gui.KeyPageUp, gui.KeyPageDown:
-			m.tableCursor = page(m.tableCursor, k == gui.KeyPageDown, m.listRoom(), len(m.tables))
+			m.tableCursor = page(m.tableCursor, k == gui.KeyPageDown, m.listRoom(), n)
 		case gui.KeyEnter:
 			m.number = ""
 			m.openTable(m.tableCursor)
 		case gui.KeyBackspace:
-			m.backspace(&m.tableCursor, len(m.tables))
+			m.backspace(&m.tableCursor, n)
 		case gui.KeyEsc:
 			m.screen = screenMenu
 		}
@@ -246,10 +249,16 @@ func (m *model) Rune(r rune) {
 		}
 
 	case screenTables:
-		if r == 'n' || r == 'p' {
-			m.tableCursor = page(m.tableCursor, r == 'n', m.listRoom(), len(m.tables))
-		} else if i, ok := m.pick(r, &m.tableCursor, len(m.tables)); ok {
-			m.openTable(i)
+		n := len(m.shownTables())
+		switch {
+		case r == 'n' || r == 'p':
+			m.tableCursor = page(m.tableCursor, r == 'n', m.listRoom(), n)
+		case r == 'f':
+			m.toggleFavOnly()
+		default:
+			if i, ok := m.pick(r, &m.tableCursor, n); ok {
+				m.openTable(i)
+			}
 		}
 
 	case screenTable:
@@ -258,6 +267,8 @@ func (m *model) Rune(r rune) {
 			m.showCreate()
 		case '2':
 			m.selectAll(0, 0)
+		case '3':
+			m.toggleFavourite()
 		}
 
 	case screenCreate:
@@ -760,16 +771,19 @@ func (m *model) openMenu(i int) {
 			return nil, err
 		}
 		return func() {
-			m.tables, m.tableCursor, m.screen = list, 0, screenTables
+			m.tables, m.tableCursor, m.favOnly, m.screen = list, 0, false, screenTables
 		}, nil
 	})
 }
 
+// openTable opens the i-th table of the list as shown.
 func (m *model) openTable(i int) {
-	if i < 0 || i >= len(m.tables) {
+	shown := m.shownTables()
+	if i < 0 || i >= len(shown) {
 		return
 	}
 	m.tableCursor = i
+	i = shown[i]
 	t := m.tables[i]
 	m.run("Reading "+t.full()+"…", queryTimeout, func(ctx context.Context) (func(), error) {
 		info, err := m.eng.describe(ctx, m.db, t)
@@ -782,6 +796,67 @@ func (m *model) openTable(i int) {
 			m.showTable()
 		}, nil
 	})
+}
+
+// ---- Favourites ----
+
+// shownTables is the index in m.tables of each table of the list: all of them, or only
+// the favourites. It keeps the cursor inside the list.
+func (m *model) shownTables() []int {
+	var shown []int
+	for i, t := range m.tables {
+		if !m.favOnly || m.isFavourite(t.full()) {
+			shown = append(shown, i)
+		}
+	}
+	m.tableCursor = max(min(m.tableCursor, len(shown)-1), 0)
+	return shown
+}
+
+func (m *model) isFavourite(name string) bool {
+	return slices.Contains(m.conn.Favourites[m.dbName], name)
+}
+
+// toggleFavOnly switches the tables list between all the tables and the favourites,
+// keeping the cursor on the same table when it is still in the list.
+func (m *model) toggleFavOnly() {
+	var current string
+	if shown := m.shownTables(); len(shown) > 0 {
+		current = m.tables[shown[m.tableCursor]].full()
+	}
+	m.favOnly = !m.favOnly
+	m.tableCursor = 0
+	for i, j := range m.shownTables() {
+		if m.tables[j].full() == current {
+			m.tableCursor = i
+		}
+	}
+}
+
+// toggleFavourite adds the open table to the favourites of the database, or removes it.
+func (m *model) toggleFavourite() {
+	name := m.table.full()
+	favs := m.conn.Favourites[m.dbName]
+	if i := slices.Index(favs, name); i >= 0 {
+		favs = slices.Delete(favs, i, i+1)
+	} else {
+		favs = append(favs, name)
+	}
+	if m.conn.Favourites == nil {
+		m.conn.Favourites = map[string][]string{}
+	}
+	if len(favs) == 0 {
+		delete(m.conn.Favourites, m.dbName)
+	} else {
+		m.conn.Favourites[m.dbName] = favs
+	}
+	if m.saveStore() {
+		if m.isFavourite(name) {
+			m.say("Added to favourites")
+		} else {
+			m.say("Removed from favourites")
+		}
+	}
 }
 
 func (m *model) showTable() {
