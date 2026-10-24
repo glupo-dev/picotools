@@ -87,7 +87,7 @@ func (m *model) entries(labels, details []string, cursor int) []line {
 		label := fmt.Sprintf("%-*s", width, labels[i])
 		detail := gui.Truncate(details[i], m.cols-width-numWidth-10)
 		if i == cursor {
-			lines = append(lines, line{gui.Strong("› "+num+"  "+label, gui.Accent), gui.Colored("   "+detail, gui.Muted)})
+			lines = append(lines, line{gui.Strong("› "+num+"  "+label, gui.Accent), gui.Colored("   "+detail, gui.Muted)}.Highlighted(m.cols-2))
 		} else {
 			lines = append(lines, line{gui.Plain("  "), gui.Strong(num, gui.Accent), gui.Plain("  " + label), gui.Colored("   "+detail, gui.Muted)})
 		}

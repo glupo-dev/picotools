@@ -13,6 +13,7 @@ type Span struct {
 	Text  string
 	Color color.Color // nil = default text color
 	Bold  bool
+	Bg    color.Color // nil = window background
 }
 
 type Line []Span
@@ -20,6 +21,21 @@ type Line []Span
 func Plain(t string) Span                  { return Span{Text: t} }
 func Colored(t string, c color.Color) Span { return Span{Text: t, Color: c} }
 func Strong(t string, c color.Color) Span  { return Span{Text: t, Color: c, Bold: true} }
+
+// Highlighted gives the line the background of a selected row, as wide as width characters.
+func (l Line) Highlighted(width int) Line {
+	out := make(Line, 0, len(l)+1)
+	n := 0
+	for _, s := range l {
+		s.Bg = SelectedBg
+		out = append(out, s)
+		n += len([]rune(s.Text))
+	}
+	if n < width {
+		out = append(out, Span{Text: strings.Repeat(" ", width-n), Bg: SelectedBg})
+	}
+	return out
+}
 
 // Truncate cuts s to n characters, ending with "…" when something is left out.
 func Truncate(s string, n int) string {
@@ -51,7 +67,7 @@ func Draw(con *Console, lines []Line) {
 		}
 		row := &rows[i+1]
 		for _, s := range l {
-			style := &widget.CustomTextGridStyle{FGColor: s.Color, TextStyle: fyne.TextStyle{Bold: s.Bold, Monospace: true}}
+			style := &widget.CustomTextGridStyle{FGColor: s.Color, BGColor: s.Bg, TextStyle: fyne.TextStyle{Bold: s.Bold, Monospace: true}}
 			for _, r := range s.Text {
 				if len(row.Cells) < con.Cols {
 					row.Cells = append(row.Cells, widget.TextGridCell{Rune: r, Style: style})

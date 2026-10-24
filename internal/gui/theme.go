@@ -28,6 +28,9 @@ const (
 
 var Background = color.NRGBA{0x17, 0x1B, 0x1A, 0xFF}
 
+// SelectedBg is the background of the selected row of a list.
+var SelectedBg = color.NRGBA{0x24, 0x3B, 0x33, 0xFF}
+
 // Colors shared by the apps.
 var (
 	Accent  = color.NRGBA{0x5D, 0xCA, 0xA5, 0xFF}
