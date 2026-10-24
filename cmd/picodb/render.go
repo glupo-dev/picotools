@@ -402,7 +402,7 @@ func (m *model) renderData() []line {
 	if end-m.gridLeft < len(t.Columns) {
 		hint += fmt.Sprintf(" · ←/→ columns (%d–%d of %d)", m.gridLeft+1, end, len(t.Columns))
 	}
-	hint += " · e export CSV · i export INSERT · d export DROP + CREATE + INSERT · esc back"
+	hint += " · c copy row · j copy row as JSON · e export CSV · i export INSERT · d export DROP + CREATE + INSERT · esc back"
 	return append(lines, m.footer(hint)...)
 }
 

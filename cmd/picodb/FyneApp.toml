@@ -3,4 +3,4 @@ Icon = "assets/icon.png"
 Name = "Pico DB"
 ID = "local.picodb"
 Version = "1.0.0"
-Build = 31
+Build = 33

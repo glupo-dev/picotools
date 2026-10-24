@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -286,6 +287,10 @@ func (m *model) Rune(r rune) {
 			m.gridMove(m.gridRoom())
 		case 'p':
 			m.gridMove(-m.gridRoom())
+		case 'c':
+			m.copyRow(rowText)
+		case 'j':
+			m.copyRow(rowJSON)
 		case 'e':
 			m.exportForm(exportCSV)
 		case 'i':
@@ -899,6 +904,80 @@ func (m *model) saveCreate() {
 }
 
 // ---- Select all ----
+
+// copyRow copies the selected row of Select all, written by format.
+func (m *model) copyRow(format func(e engine, cols []column, row []any) string) {
+	if m.gridCursor < 0 || m.gridCursor >= len(m.rows) {
+		return
+	}
+	m.copy(format(m.eng, m.table.Columns, m.rows[m.gridCursor]))
+	m.say("Row copied")
+}
+
+// rowText writes a row as one "name = value" line per column, with the names aligned.
+func rowText(e engine, cols []column, row []any) string {
+	width := 0
+	for _, c := range cols {
+		width = max(width, len([]rune(c.Name)))
+	}
+	var b strings.Builder
+	for i, c := range cols {
+		s, null := e.text(row[i], c.Base)
+		if null {
+			s = "NULL"
+		}
+		fmt.Fprintf(&b, "%-*s = %s\n", width, c.Name, s)
+	}
+	return b.String()
+}
+
+// rowJSON writes a row as a JSON object with the columns in their order: NULL as null,
+// booleans and numbers as they are, json columns as JSON, everything else as text.
+func rowJSON(e engine, cols []column, row []any) string {
+	var b strings.Builder
+	b.WriteString("{\n")
+	for i, c := range cols {
+		var val any
+		switch x := row[i].(type) {
+		case nil, bool, int64:
+			val = x
+		case float64:
+			if isFinite(x) {
+				val = x
+			}
+		}
+		if val == nil && row[i] != nil {
+			s, _ := e.text(row[i], c.Base)
+			val = s
+			if (c.Base == "json" || c.Base == "jsonb") && json.Valid([]byte(s)) {
+				val = json.RawMessage(s)
+			}
+		}
+		v, err := jsonText(val)
+		if err != nil {
+			v, _ = jsonText(fmt.Sprint(val))
+		}
+		name, _ := jsonText(c.Name)
+		fmt.Fprintf(&b, "  %s: %s", name, v)
+		if i < len(cols)-1 {
+			b.WriteString(",")
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("}\n")
+	return b.String()
+}
+
+// jsonText writes v as JSON, leaving <, > and & as they are.
+func jsonText(v any) (string, error) {
+	var b strings.Builder
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(b.String(), "\n"), nil
+}
 
 // gridMove moves the selected row of Select all by n rows. Past the last row of the page
 // it reads the next page, before the first row the previous one.

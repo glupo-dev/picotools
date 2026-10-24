@@ -3,4 +3,4 @@ Icon = "assets/icon.png"
 Name = "Pico API"
 ID = "local.picoapi"
 Version = "1.0.0"
-Build = 41
+Build = 43
