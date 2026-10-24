@@ -351,7 +351,10 @@ func (m *model) renderData() []line {
 	lines = append(lines, header)
 
 	room := m.gridRoom()
-	m.gridTop = min(m.gridTop, max(len(m.rows)-room, 0))
+	// Scroll to keep the selected row in view.
+	m.gridTop = min(m.gridTop, m.gridCursor)
+	m.gridTop = max(m.gridTop, m.gridCursor-room+1)
+	m.gridTop = max(min(m.gridTop, len(m.rows)-room), 0)
 	shown := 0
 	for i := m.gridTop; i < len(m.rows) && shown < room; i++ {
 		l := line{gui.Colored(fmt.Sprintf("%*d  ", numWidth, m.page*pageSize+i+1), gui.Muted)}
@@ -363,6 +366,9 @@ func (m *model) renderData() []line {
 				l = append(l, gui.Plain(cell))
 			}
 		}
+		if i == m.gridCursor {
+			l = l.Highlighted(m.cols - 2)
+		}
 		lines = append(lines, l)
 		shown++
 	}
@@ -370,7 +376,7 @@ func (m *model) renderData() []line {
 		lines = append(lines, nil)
 	}
 
-	hint := "n next · p previous · ↑/↓ scroll"
+	hint := "↑/↓ move · n/p or pgdn/pgup page"
 	if end-m.gridLeft < len(t.Columns) {
 		hint += fmt.Sprintf(" · ←/→ columns (%d–%d of %d)", m.gridLeft+1, end, len(t.Columns))
 	}

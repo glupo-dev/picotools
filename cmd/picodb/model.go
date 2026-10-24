@@ -63,6 +63,7 @@ type model struct {
 	page       int
 	rows       [][]any
 	gridTop    int // first row shown of the page
+	gridCursor int // selected row of the page
 	gridLeft   int // first column shown
 
 	form    *form
@@ -183,19 +184,19 @@ func (m *model) Key(k string) {
 		case gui.KeyEsc:
 			m.showTable()
 		case gui.KeyUp:
-			m.gridTop = max(m.gridTop-1, 0)
+			m.gridMove(-1)
 		case gui.KeyDown:
-			m.gridTop = min(m.gridTop+1, max(len(m.rows)-room, 0))
+			m.gridMove(1)
 		case gui.KeyPageUp:
-			m.gridTop = max(m.gridTop-room, 0)
+			m.gridMove(-room)
 		case gui.KeyPageDown:
-			m.gridTop = min(m.gridTop+room, max(len(m.rows)-room, 0))
+			m.gridMove(room)
 		case gui.KeyLeft:
 			m.gridLeft = max(m.gridLeft-1, 0)
 		case gui.KeyRight:
 			m.gridLeft = min(m.gridLeft+1, len(m.table.Columns)-1)
 		case gui.KeyHome:
-			m.gridTop, m.gridLeft = 0, 0
+			m.gridTop, m.gridCursor, m.gridLeft = 0, 0, 0
 		}
 
 	case screenForm:
@@ -256,7 +257,7 @@ func (m *model) Rune(r rune) {
 		case '1':
 			m.showCreate()
 		case '2':
-			m.selectAll(0)
+			m.selectAll(0, 0)
 		}
 
 	case screenCreate:
@@ -271,13 +272,9 @@ func (m *model) Rune(r rune) {
 	case screenData:
 		switch r {
 		case 'n':
-			if len(m.rows) == pageSize {
-				m.selectAll(m.page + 1)
-			}
+			m.gridMove(m.gridRoom())
 		case 'p':
-			if m.page > 0 {
-				m.selectAll(m.page - 1)
-			}
+			m.gridMove(-m.gridRoom())
 		case 'e':
 			m.exportForm(exportCSV)
 		case 'i':
@@ -828,7 +825,22 @@ func (m *model) saveCreate() {
 
 // ---- Select all ----
 
-func (m *model) selectAll(page int) {
+// gridMove moves the selected row of Select all by n rows. Past the last row of the page
+// it reads the next page, before the first row the previous one.
+func (m *model) gridMove(n int) {
+	last := len(m.rows) - 1
+	switch {
+	case n > 0 && m.gridCursor == last && len(m.rows) == pageSize:
+		m.selectAll(m.page+1, 0)
+	case n < 0 && m.gridCursor == 0 && m.page > 0:
+		m.selectAll(m.page-1, pageSize-1)
+	default:
+		m.gridCursor = max(min(m.gridCursor+n, last), 0)
+	}
+}
+
+// selectAll reads a page of the table and selects its row at cursor.
+func (m *model) selectAll(page, cursor int) {
 	t := m.table
 	m.run(fmt.Sprintf("Reading page %d of %s…", page+1, t.full()), queryTimeout, func(ctx context.Context) (func(), error) {
 		rows, err := readPage(ctx, m.eng, m.db, t, page)
@@ -840,7 +852,9 @@ func (m *model) selectAll(page int) {
 				m.say("No more rows")
 				return
 			}
-			m.page, m.rows, m.gridTop = page, rows, 0
+			m.page, m.rows = page, rows
+			m.gridCursor = min(cursor, len(rows)-1)
+			m.gridTop = max(m.gridCursor-m.gridRoom()+1, 0)
 			if m.screen != screenData {
 				m.gridLeft = 0
 			}
