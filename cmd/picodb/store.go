@@ -17,6 +17,9 @@ type Connection struct {
 	Type string `json:"type,omitempty"` // sqlserver or postgres; empty is sqlserver
 
 	Favourites map[string][]string `json:"favourites,omitempty"` // database → favourite tables (schema.name)
+	// database → table (schema.name) → favourite columns; the primary key ones are
+	// always favourites and are not written here.
+	FavColumns map[string]map[string][]string `json:"favColumns,omitempty"`
 }
 
 // Store is everything Pico DB keeps, except the connection strings.

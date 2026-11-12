@@ -32,7 +32,7 @@ func (m *model) Render(cols, rows int) []line {
 		if m.isFavourite(m.table.full()) {
 			fav = "3 remove from favourites"
 		}
-		lines = append(lines, m.renderViewer("1 show CREATE TABLE · 2 select all · "+fav+" · ↑/↓ scroll · esc back")...)
+		lines = append(lines, m.renderTable("1 show CREATE TABLE · 2 select all · "+fav+" · ↑/↓ move · n/p or pgdn/pgup page · f favourite column · esc back")...)
 	case screenCreate:
 		lines = append(lines, m.renderViewer("c copy · s save · ↑/↓ scroll · pgup/pgdn page · esc back")...)
 	case screenData:
@@ -217,8 +217,28 @@ func (m *model) renderViewer(hint string) []line {
 	return append(lines, m.footer(hint+" · "+where)...)
 }
 
-// tablePage is the text of the table page: rows, columns and indexes.
-func tablePage(t *tableInfo) string {
+// renderTable draws the table page with the selected column highlighted.
+func (m *model) renderTable(hint string) []line {
+	lines := []line{{gui.Strong(m.crumbs(), nil)}, nil}
+	room := m.viewRoom()
+	m.tableScroll()
+	end := min(m.tableTop+room, len(m.tableLines))
+	for i := m.tableTop; i < end; i++ {
+		l := line{gui.Plain(gui.Truncate(m.tableLines[i], m.cols-2))}
+		if i == m.colFirst+m.colCursor && m.colCursor < len(m.table.Columns) {
+			l = l.Highlighted(m.cols - 2)
+		}
+		lines = append(lines, l)
+	}
+	for i := end - m.tableTop; i < room; i++ {
+		lines = append(lines, nil)
+	}
+	return append(lines, m.footer(hint)...)
+}
+
+// tablePage is the text of the table page: rows, columns and indexes, one line each,
+// and the line with the first column. A favourite column has an asterisk after its number.
+func tablePage(t *tableInfo, fav func(name string) bool) ([]string, int) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Rows: %s\n", thousands(t.Rows))
 	if t.PartitionBy != "" {
@@ -236,7 +256,7 @@ func tablePage(t *tableInfo) string {
 			fk[c] = "FK → " + f.RefTable + "." + f.RefCols[i]
 		}
 	}
-	rows := [][]string{{"#", "Name", "Type", "Null", "Key"}}
+	rows := [][]string{{"# ", "Name", "Type", "Null", "Key"}}
 	for i, c := range t.Columns {
 		typ := c.Type
 		switch {
@@ -258,7 +278,11 @@ func tablePage(t *tableInfo) string {
 		if f, ok := fk[c.Name]; ok {
 			keys = append(keys, f)
 		}
-		rows = append(rows, []string{fmt.Sprint(i + 1), c.Name, typ, null, strings.Join(keys, " · ")})
+		num := fmt.Sprint(i+1) + " "
+		if fav(c.Name) {
+			num = fmt.Sprint(i+1) + "*"
+		}
+		rows = append(rows, []string{num, c.Name, typ, null, strings.Join(keys, " · ")})
 	}
 	widths := make([]int, len(rows[0]))
 	for _, r := range rows {
@@ -266,6 +290,7 @@ func tablePage(t *tableInfo) string {
 			widths[i] = max(widths[i], len([]rune(v)))
 		}
 	}
+	first := strings.Count(b.String(), "\n") + 1
 	for _, r := range rows {
 		b.WriteString(" ")
 		for i, v := range r {
@@ -308,7 +333,7 @@ func tablePage(t *tableInfo) string {
 			fmt.Fprintf(&b, "  %-*s  (%s) · %s\n", width, ix.Name, cols, what)
 		}
 	}
-	return strings.TrimRight(b.String(), "\n")
+	return strings.Split(strings.TrimRight(b.String(), "\n"), "\n"), first
 }
 
 // ---- Select all ----
@@ -337,18 +362,23 @@ func (m *model) renderData() []line {
 	}
 	lines := []line{{gui.Strong(m.crumbs()+" › Select all", nil), gui.Colored(info, gui.Muted)}, nil}
 
-	// Text and width of every cell of the page.
+	// Text and width of every cell of the page, for the columns shown.
+	shownCols := m.shownColumns()
+	cols := make([]column, len(shownCols))
+	for j, k := range shownCols {
+		cols[j] = t.Columns[k]
+	}
 	cells := make([][]string, len(m.rows))
 	nulls := make([][]bool, len(m.rows))
-	widths := make([]int, len(t.Columns))
-	for j, c := range t.Columns {
+	widths := make([]int, len(cols))
+	for j, c := range cols {
 		widths[j] = min(len([]rune(c.Name)), maxCell)
 	}
 	for i, r := range m.rows {
-		cells[i] = make([]string, len(r))
-		nulls[i] = make([]bool, len(r))
-		for j, v := range r {
-			s, null := m.eng.text(v, t.Columns[j].Base)
+		cells[i] = make([]string, len(cols))
+		nulls[i] = make([]bool, len(cols))
+		for j, k := range shownCols {
+			s, null := m.eng.text(r[k], cols[j].Base)
 			if null {
 				s = "NULL"
 			}
@@ -362,7 +392,7 @@ func (m *model) renderData() []line {
 	// The columns that fit, from gridLeft.
 	end := m.gridLeft
 	used := numWidth + 2
-	for end < len(t.Columns) && (end == m.gridLeft || used+widths[end]+2 <= m.cols-2) {
+	for end < len(cols) && (end == m.gridLeft || used+widths[end]+2 <= m.cols-2) {
 		used += widths[end] + 2
 		end++
 	}
@@ -370,7 +400,7 @@ func (m *model) renderData() []line {
 	pad := func(s string, w int) string { return s + strings.Repeat(" ", max(w-len([]rune(s)), 0)) }
 	header := line{gui.Plain(strings.Repeat(" ", numWidth+2))}
 	for j := m.gridLeft; j < end; j++ {
-		header = append(header, gui.Strong(pad(gui.Truncate(t.Columns[j].Name, maxCell), widths[j])+"  ", gui.Accent))
+		header = append(header, gui.Strong(pad(gui.Truncate(cols[j].Name, maxCell), widths[j])+"  ", gui.Accent))
 	}
 	lines = append(lines, header)
 
@@ -401,8 +431,15 @@ func (m *model) renderData() []line {
 	}
 
 	hint := "↑/↓ move · n/p or pgdn/pgup page"
-	if end-m.gridLeft < len(t.Columns) {
-		hint += fmt.Sprintf(" · ←/→ columns (%d–%d of %d)", m.gridLeft+1, end, len(t.Columns))
+	if end-m.gridLeft < len(cols) {
+		hint += fmt.Sprintf(" · ←/→ columns (%d–%d of %d)", m.gridLeft+1, end, len(cols))
+	}
+	if m.hasFavColumns(true) {
+		if m.favCols {
+			hint += " · f all columns"
+		} else {
+			hint += " · f only favourite columns"
+		}
 	}
 	hint += " · c copy row · j copy row as JSON · e export CSV · i export INSERT · d export DROP + CREATE + INSERT · esc back"
 	return append(lines, m.footer(hint)...)

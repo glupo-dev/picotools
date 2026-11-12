@@ -65,9 +65,14 @@ type model struct {
 	viewer     gui.Viewer
 	page       int
 	rows       [][]any
-	gridTop    int // first row shown of the page
-	gridCursor int // selected row of the page
-	gridLeft   int // first column shown
+	gridTop    int  // first row shown of the page
+	gridCursor int  // selected row of the page
+	gridLeft   int  // first column shown
+	favCols    bool // Select all shows only the favourite columns
+	colCursor  int  // selected column of the table page
+	tableTop   int  // first line shown of the table page
+	tableLines []string
+	colFirst   int // line of the table page with the first column
 
 	form    *form
 	confirm string
@@ -169,11 +174,21 @@ func (m *model) Key(k string) {
 		}
 
 	case screenTable:
-		if k == gui.KeyEsc {
+		n := len(m.table.Columns)
+		switch k {
+		case gui.KeyEsc:
 			m.screen = screenTables
-			return
+		case gui.KeyUp:
+			m.colCursor = max(m.colCursor-1, 0)
+		case gui.KeyDown:
+			m.colCursor = min(m.colCursor+1, max(n-1, 0))
+		case gui.KeyPageUp, gui.KeyPageDown:
+			m.columnPage(k == gui.KeyPageDown)
+		case gui.KeyHome:
+			m.colCursor = 0
+		case gui.KeyEnd:
+			m.colCursor = max(n-1, 0)
 		}
-		m.viewer.Key(k, m.cols, m.viewRoom())
 
 	case screenCreate:
 		if k == gui.KeyEsc {
@@ -197,7 +212,7 @@ func (m *model) Key(k string) {
 		case gui.KeyLeft:
 			m.gridLeft = max(m.gridLeft-1, 0)
 		case gui.KeyRight:
-			m.gridLeft = min(m.gridLeft+1, len(m.table.Columns)-1)
+			m.gridLeft = min(m.gridLeft+1, max(len(m.shownColumns())-1, 0))
 		case gui.KeyHome:
 			m.gridTop, m.gridCursor, m.gridLeft = 0, 0, 0
 		}
@@ -269,6 +284,10 @@ func (m *model) Rune(r rune) {
 			m.selectAll(0, 0, 0)
 		case '3':
 			m.toggleFavourite()
+		case 'n', 'p':
+			m.columnPage(r == 'n')
+		case 'f':
+			m.toggleFavColumn()
 		}
 
 	case screenCreate:
@@ -286,6 +305,10 @@ func (m *model) Rune(r rune) {
 			m.gridPage(true)
 		case 'p':
 			m.gridPage(false)
+		case 'f':
+			if m.hasFavColumns(true) {
+				m.favCols, m.gridLeft = !m.favCols, 0
+			}
 		case 'c':
 			m.copyRow(rowText)
 		case 'j':
@@ -807,6 +830,7 @@ func (m *model) openTable(i int) {
 		return func() {
 			m.table = info
 			m.tables[i].Rows = info.Rows
+			m.colCursor, m.tableTop = 0, 0
 			m.showTable()
 		}, nil
 	})
@@ -874,8 +898,121 @@ func (m *model) toggleFavourite() {
 }
 
 func (m *model) showTable() {
-	m.viewer.Set(tablePage(m.table), "", false)
+	m.tableLines, m.colFirst = tablePage(m.table, m.isFavColumn)
 	m.screen = screenTable
+}
+
+// ---- Favourite columns ----
+
+// isFavColumn says whether a column of the open table is a favourite: the primary key
+// columns always are.
+func (m *model) isFavColumn(name string) bool {
+	return slices.Contains(m.table.primaryKey(), name) ||
+		slices.Contains(m.conn.FavColumns[m.dbName][m.table.full()], name)
+}
+
+// hasFavColumns says whether the open table has favourite columns, counting the primary
+// key ones only when withKey.
+func (m *model) hasFavColumns(withKey bool) bool {
+	return len(m.conn.FavColumns[m.dbName][m.table.full()]) > 0 || withKey && len(m.table.primaryKey()) > 0
+}
+
+// toggleFavColumn adds the selected column of the table page to the favourites, or
+// removes it; the primary key columns stay favourites.
+func (m *model) toggleFavColumn() {
+	if m.colCursor >= len(m.table.Columns) {
+		return
+	}
+	col := m.table.Columns[m.colCursor].Name
+	if slices.Contains(m.table.primaryKey(), col) {
+		return
+	}
+	name := m.table.full()
+	favs := m.conn.FavColumns[m.dbName][name]
+	if i := slices.Index(favs, col); i >= 0 {
+		favs = slices.Delete(favs, i, i+1)
+	} else {
+		favs = append(favs, col)
+	}
+	if m.conn.FavColumns == nil {
+		m.conn.FavColumns = map[string]map[string][]string{}
+	}
+	if m.conn.FavColumns[m.dbName] == nil {
+		m.conn.FavColumns[m.dbName] = map[string][]string{}
+	}
+	if len(favs) == 0 {
+		delete(m.conn.FavColumns[m.dbName], name)
+		if len(m.conn.FavColumns[m.dbName]) == 0 {
+			delete(m.conn.FavColumns, m.dbName)
+		}
+	} else {
+		m.conn.FavColumns[m.dbName][name] = favs
+	}
+	if m.saveStore() {
+		if m.isFavColumn(col) {
+			m.say("Added to favourite columns")
+		} else {
+			m.say("Removed from favourite columns")
+		}
+	}
+	m.tableLines, m.colFirst = tablePage(m.table, m.isFavColumn)
+}
+
+// shownColumns is the index of each column Select all shows: all, or the favourites.
+func (m *model) shownColumns() []int {
+	var shown []int
+	for i, c := range m.table.Columns {
+		if !m.favCols || m.isFavColumn(c.Name) {
+			shown = append(shown, i)
+		}
+	}
+	return shown
+}
+
+// tableScroll keeps the selected column of the table page in view, with the lines above
+// the first column when it is selected and the indexes under the last one, and gives the
+// first column shown and the last.
+func (m *model) tableScroll() (first, last int) {
+	room := m.viewRoom()
+	n := len(m.table.Columns)
+	line := m.colFirst + m.colCursor
+	top := min(m.tableTop, line)
+	top = max(top, line-room+1)
+	switch {
+	case m.colCursor == 0:
+		top = 0
+	case m.colCursor == n-1:
+		top = max(top, min(len(m.tableLines)-room, line))
+	}
+	m.tableTop = max(min(top, len(m.tableLines)-room), 0)
+	first = max(m.tableTop-m.colFirst, 0)
+	last = min(m.tableTop+room-1-m.colFirst, n-1)
+	return first, last
+}
+
+// columnPage moves the selected column of the table page as page does in the lists: down,
+// to the last column shown, or when it is already there by a screen; up, the same with
+// the first column shown.
+func (m *model) columnPage(down bool) {
+	n := len(m.table.Columns)
+	if n == 0 {
+		return
+	}
+	first, last := m.tableScroll()
+	room := max(last-first+1, 1)
+	if down {
+		if m.colCursor < last {
+			m.colCursor = last
+		} else {
+			m.colCursor = min(m.colCursor+room, n-1)
+		}
+		return
+	}
+	if m.colCursor > first {
+		m.colCursor = first
+	} else {
+		m.colCursor = max(m.colCursor-room, 0)
+	}
 }
 
 func (m *model) showCreate() {
@@ -914,12 +1051,18 @@ func (m *model) saveCreate() {
 
 // ---- Select all ----
 
-// copyRow copies the selected row of Select all, written by format.
+// copyRow copies the selected row of Select all with the columns shown, written by format.
 func (m *model) copyRow(format func(e engine, cols []column, row []any) string) {
 	if m.gridCursor < 0 || m.gridCursor >= len(m.rows) {
 		return
 	}
-	m.copy(format(m.eng, m.table.Columns, m.rows[m.gridCursor]))
+	shown := m.shownColumns()
+	cols := make([]column, len(shown))
+	row := make([]any, len(shown))
+	for i, j := range shown {
+		cols[i], row[i] = m.table.Columns[j], m.rows[m.gridCursor][j]
+	}
+	m.copy(format(m.eng, cols, row))
 	m.say("Row copied")
 }
 
@@ -1050,6 +1193,7 @@ func (m *model) selectAll(page, cursor, top int) {
 			m.gridTop = top
 			if m.screen != screenData {
 				m.gridLeft = 0
+				m.favCols = m.hasFavColumns(false)
 			}
 			m.screen = screenData
 		}, nil
