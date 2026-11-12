@@ -65,12 +65,13 @@ type model struct {
 	viewer     gui.Viewer
 	page       int
 	rows       [][]any
-	gridTop    int  // first row shown of the page
-	gridCursor int  // selected row of the page
-	gridLeft   int  // first column shown
-	favCols    bool // Select all shows only the favourite columns
-	colCursor  int  // selected column of the table page
-	tableTop   int  // first line shown of the table page
+	gridTop    int           // first row shown of the page
+	gridCursor int           // selected row of the page
+	gridLeft   int           // first column shown
+	favCols    bool          // Select all shows only the favourite columns
+	marked     map[int][]any // rows marked in Select all, by number in the table (from 0)
+	colCursor  int           // selected column of the table page
+	tableTop   int           // first line shown of the table page
 	tableLines []string
 	colFirst   int // line of the table page with the first column
 
@@ -305,14 +306,18 @@ func (m *model) Rune(r rune) {
 			m.gridPage(true)
 		case 'p':
 			m.gridPage(false)
+		case ' ':
+			m.toggleMark()
+		case 'u':
+			m.marked = nil
 		case 'f':
 			if m.hasFavColumns(true) {
 				m.favCols, m.gridLeft = !m.favCols, 0
 			}
 		case 'c':
-			m.copyRow(rowText)
+			m.copyRow(rowText, textRows)
 		case 'j':
-			m.copyRow(rowJSON)
+			m.copyRow(rowJSON, jsonRows)
 		case 'e':
 			m.exportForm(exportCSV)
 		case 'i':
@@ -1051,19 +1056,88 @@ func (m *model) saveCreate() {
 
 // ---- Select all ----
 
-// copyRow copies the selected row of Select all with the columns shown, written by format.
-func (m *model) copyRow(format func(e engine, cols []column, row []any) string) {
+// toggleMark marks the selected row of Select all, or unmarks it, and goes to the next one.
+func (m *model) toggleMark() {
 	if m.gridCursor < 0 || m.gridCursor >= len(m.rows) {
+		return
+	}
+	n := m.page*pageSize + m.gridCursor
+	if _, ok := m.marked[n]; ok {
+		delete(m.marked, n)
+	} else {
+		if m.marked == nil {
+			m.marked = map[int][]any{}
+		}
+		m.marked[n] = m.rows[m.gridCursor]
+	}
+	m.gridMove(1)
+}
+
+// isMarked says whether the i-th row of the page is marked.
+func (m *model) isMarked(i int) bool {
+	_, ok := m.marked[m.page*pageSize+i]
+	return ok
+}
+
+// copyRow copies the marked rows of Select all in their order, or the selected row when
+// none is marked, with the columns shown; format writes each row, join puts them together.
+func (m *model) copyRow(format func(e engine, cols []column, row []any) string, join func(rows []string) string) {
+	var rows [][]any
+	if len(m.marked) > 0 {
+		keys := make([]int, 0, len(m.marked))
+		for n := range m.marked {
+			keys = append(keys, n)
+		}
+		slices.Sort(keys)
+		for _, n := range keys {
+			rows = append(rows, m.marked[n])
+		}
+	} else if m.gridCursor >= 0 && m.gridCursor < len(m.rows) {
+		rows = append(rows, m.rows[m.gridCursor])
+	} else {
 		return
 	}
 	shown := m.shownColumns()
 	cols := make([]column, len(shown))
-	row := make([]any, len(shown))
 	for i, j := range shown {
-		cols[i], row[i] = m.table.Columns[j], m.rows[m.gridCursor][j]
+		cols[i] = m.table.Columns[j]
 	}
-	m.copy(format(m.eng, cols, row))
-	m.say("Row copied")
+	texts := make([]string, len(rows))
+	for k, r := range rows {
+		row := make([]any, len(shown))
+		for i, j := range shown {
+			row[i] = r[j]
+		}
+		texts[k] = format(m.eng, cols, row)
+	}
+	if len(texts) == 1 {
+		m.copy(texts[0])
+		m.say("Row copied")
+		return
+	}
+	m.copy(join(texts))
+	m.say(fmt.Sprintf("%d rows copied", len(texts)))
+}
+
+// textRows puts rows written by rowText one after the other, with a blank line between.
+func textRows(rows []string) string { return strings.Join(rows, "\n") }
+
+// jsonRows puts rows written by rowJSON in a JSON array.
+func jsonRows(rows []string) string {
+	var b strings.Builder
+	b.WriteString("[\n")
+	for i, r := range rows {
+		lines := strings.Split(strings.TrimSuffix(r, "\n"), "\n")
+		for j, l := range lines {
+			b.WriteString("  " + l)
+			if j == len(lines)-1 && i < len(rows)-1 {
+				b.WriteString(",")
+			}
+			b.WriteString("\n")
+		}
+	}
+	b.WriteString("]\n")
+	return b.String()
 }
 
 // rowText writes a row as one "name = value" line per column, with the names aligned.
@@ -1194,6 +1268,7 @@ func (m *model) selectAll(page, cursor, top int) {
 			if m.screen != screenData {
 				m.gridLeft = 0
 				m.favCols = m.hasFavColumns(false)
+				m.marked = nil
 			}
 			m.screen = screenData
 		}, nil

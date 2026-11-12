@@ -360,6 +360,11 @@ func (m *model) renderData() []line {
 	if len(m.rows) == 0 {
 		info = "   no rows"
 	}
+	if len(m.marked) == 1 {
+		info += " · 1 marked"
+	} else if len(m.marked) > 1 {
+		info += fmt.Sprintf(" · %d marked", len(m.marked))
+	}
 	lines := []line{{gui.Strong(m.crumbs()+" › Select all", nil), gui.Colored(info, gui.Muted)}, nil}
 
 	// Text and width of every cell of the page, for the columns shown.
@@ -411,12 +416,19 @@ func (m *model) renderData() []line {
 	m.gridTop = max(min(m.gridTop, len(m.rows)-room), 0)
 	shown := 0
 	for i := m.gridTop; i < len(m.rows) && shown < room; i++ {
+		marked := m.isMarked(i)
 		l := line{gui.Colored(fmt.Sprintf("%*d  ", numWidth, m.page*pageSize+i+1), gui.Muted)}
+		if marked {
+			l = line{gui.Strong(fmt.Sprintf("%*d* ", numWidth, m.page*pageSize+i+1), gui.Amber)}
+		}
 		for j := m.gridLeft; j < end; j++ {
 			cell := pad(cells[i][j], widths[j]) + "  "
-			if nulls[i][j] {
+			switch {
+			case nulls[i][j]:
 				l = append(l, gui.Colored(cell, gui.Muted))
-			} else {
+			case marked:
+				l = append(l, gui.Colored(cell, gui.Amber))
+			default:
 				l = append(l, gui.Plain(cell))
 			}
 		}
@@ -441,7 +453,13 @@ func (m *model) renderData() []line {
 			hint += " · f only favourite columns"
 		}
 	}
-	hint += " · c copy row · j copy row as JSON · e export CSV · i export INSERT · d export DROP + CREATE + INSERT · esc back"
+	hint += " · space mark row"
+	if len(m.marked) > 0 {
+		hint += " · u unmark all · c copy marked · j copy marked as JSON ·"
+	} else {
+		hint += " · c copy row · j copy row as JSON ·"
+	}
+	hint += " e export CSV · i export INSERT · d export DROP + CREATE + INSERT · esc back"
 	return append(lines, m.footer(hint)...)
 }
 
