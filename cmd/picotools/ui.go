@@ -403,9 +403,9 @@ func (m *model) copyAll() {
 
 func (m *model) render() []line {
 	lines := []line{
-		{strong("╭────────────────╮", accent)},
+		{strong("╭──────────────────╮", accent)},
 		{strong("│    Pico Tools    │", accent)},
-		{strong("╰────────────────╯", accent)},
+		{strong("╰──────────────────╯", accent)},
 		nil,
 	}
 	switch m.screen {

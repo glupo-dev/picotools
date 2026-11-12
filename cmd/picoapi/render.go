@@ -14,9 +14,9 @@ type line = gui.Line
 func (m *model) Render(cols, rows int) []line {
 	m.cols, m.rows = cols, rows
 	lines := []line{
-		{gui.Strong("╭────────────────╮", gui.Accent)},
+		{gui.Strong("╭──────────────────╮", gui.Accent)},
 		{gui.Strong("│     Pico API     │", gui.Accent)},
-		{gui.Strong("╰────────────────╯", gui.Accent)},
+		{gui.Strong("╰──────────────────╯", gui.Accent)},
 		nil,
 	}
 	switch m.screen {

@@ -183,7 +183,6 @@ func (m *model) Key(k string) {
 		m.viewer.Key(k, m.cols, m.viewRoom())
 
 	case screenData:
-		room := m.gridRoom()
 		switch k {
 		case gui.KeyEsc:
 			m.showTable()
@@ -192,9 +191,9 @@ func (m *model) Key(k string) {
 		case gui.KeyDown:
 			m.gridMove(1)
 		case gui.KeyPageUp:
-			m.gridMove(-room)
+			m.gridPage(false)
 		case gui.KeyPageDown:
-			m.gridMove(room)
+			m.gridPage(true)
 		case gui.KeyLeft:
 			m.gridLeft = max(m.gridLeft-1, 0)
 		case gui.KeyRight:
@@ -267,7 +266,7 @@ func (m *model) Rune(r rune) {
 		case '1':
 			m.showCreate()
 		case '2':
-			m.selectAll(0, 0)
+			m.selectAll(0, 0, 0)
 		case '3':
 			m.toggleFavourite()
 		}
@@ -284,9 +283,9 @@ func (m *model) Rune(r rune) {
 	case screenData:
 		switch r {
 		case 'n':
-			m.gridMove(m.gridRoom())
+			m.gridPage(true)
 		case 'p':
-			m.gridMove(-m.gridRoom())
+			m.gridPage(false)
 		case 'c':
 			m.copyRow(rowText)
 		case 'j':
@@ -329,10 +328,20 @@ func move(cursor int, k string, n int) int {
 	return (cursor + 1) % n
 }
 
-// page takes the cursor one page down (or up) in a list of n entries, stopping at the ends.
+// page moves the cursor of a list of n entries shown room at a time: down, to the last
+// entry of its page, or when it is already there to the last entry of the next page;
+// up, the same with the first entry and the previous page.
 func page(cursor int, down bool, room, n int) int {
+	first := cursor / room * room
 	if down {
+		last := min(first+room-1, n-1)
+		if cursor < last {
+			return last
+		}
 		return max(min(cursor+room, n-1), 0)
+	}
+	if cursor > first {
+		return first
 	}
 	return max(cursor-room, 0)
 }
@@ -985,16 +994,46 @@ func (m *model) gridMove(n int) {
 	last := len(m.rows) - 1
 	switch {
 	case n > 0 && m.gridCursor == last && len(m.rows) == pageSize:
-		m.selectAll(m.page+1, 0)
+		m.selectAll(m.page+1, 0, 0)
 	case n < 0 && m.gridCursor == 0 && m.page > 0:
-		m.selectAll(m.page-1, pageSize-1)
+		m.selectAll(m.page-1, pageSize-1, pageSize-1)
 	default:
 		m.gridCursor = max(min(m.gridCursor+n, last), 0)
 	}
 }
 
-// selectAll reads a page of the table and selects its row at cursor.
-func (m *model) selectAll(page, cursor int) {
+// gridPage moves the selected row of Select all as page does in the lists: down, to the
+// last row shown, or when it is already there to the last row of the next screen, reading
+// the next page past the end of this one; up, the same with the first row.
+func (m *model) gridPage(down bool) {
+	room := m.gridRoom()
+	last := len(m.rows) - 1
+	if down {
+		bottom := min(m.gridTop+room-1, last)
+		switch {
+		case m.gridCursor < bottom:
+			m.gridCursor = bottom
+		case bottom < last:
+			m.gridCursor = min(m.gridCursor+room, last)
+		case len(m.rows) == pageSize:
+			m.selectAll(m.page+1, room-1, 0)
+		}
+		return
+	}
+	switch {
+	case m.gridCursor > m.gridTop:
+		m.gridCursor = m.gridTop
+	case m.gridTop > 0:
+		m.gridCursor = max(m.gridCursor-room, 0)
+		m.gridTop = m.gridCursor
+	case m.page > 0:
+		top := max(pageSize-room, 0)
+		m.selectAll(m.page-1, top, top)
+	}
+}
+
+// selectAll reads a page of the table and selects its row at cursor, showing it from row top.
+func (m *model) selectAll(page, cursor, top int) {
 	t := m.table
 	m.run(fmt.Sprintf("Reading page %d of %s…", page+1, t.full()), queryTimeout, func(ctx context.Context) (func(), error) {
 		rows, err := readPage(ctx, m.eng, m.db, t, page)
@@ -1008,7 +1047,7 @@ func (m *model) selectAll(page, cursor int) {
 			}
 			m.page, m.rows = page, rows
 			m.gridCursor = min(cursor, len(rows)-1)
-			m.gridTop = max(m.gridCursor-m.gridRoom()+1, 0)
+			m.gridTop = top
 			if m.screen != screenData {
 				m.gridLeft = 0
 			}

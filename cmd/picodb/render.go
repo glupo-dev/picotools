@@ -13,9 +13,9 @@ type line = gui.Line
 func (m *model) Render(cols, rows int) []line {
 	m.cols, m.height = cols, rows
 	lines := []line{
-		{gui.Strong("╭────────────────╮", gui.Accent)},
-		{gui.Strong("│     Pico DB      │", gui.Accent)},
-		{gui.Strong("╰────────────────╯", gui.Accent)},
+		{gui.Strong("╭─────────────────╮", gui.Accent)},
+		{gui.Strong("│     Pico DB     │", gui.Accent)},
+		{gui.Strong("╰─────────────────╯", gui.Accent)},
 		nil,
 	}
 	switch m.screen {
@@ -66,12 +66,20 @@ func (m *model) crumbs() string {
 }
 
 // listRoom is how many entries of a list fit: the window less the title (4 lines),
-// top margin, the list header, the "new" entry, the status and the hint.
+// top margin, the list header, the status and the hint, and the "new" entry of the connections.
+// A page has at most pageSize entries, as in Select all.
 func (m *model) listRoom() int {
-	return max(m.height-11, 1)
+	room := m.height - 9
+	if m.screen == screenConnections {
+		room -= 2
+	}
+	if m.status != nil {
+		room -= 2
+	}
+	return min(max(room, 1), pageSize)
 }
 
-// entries draws a list with the selected one marked, scrolled to keep it in view.
+// entries draws a list with the selected one marked, a page at a time: the page that holds it.
 // Each entry is its label (padded to the same width) and a detail in grey; a marked
 // entry has an asterisk after its number.
 func (m *model) entries(labels, details []string, marked []bool, cursor int) []line {
@@ -80,13 +88,10 @@ func (m *model) entries(labels, details []string, marked []bool, cursor int) []l
 		width = max(width, len([]rune(l)))
 	}
 	room := m.listRoom()
-	start := min(max(cursor-room/2, 0), max(len(labels)-room, 0))
+	start := cursor / room * room
 	end := min(start+room, len(labels))
 	numWidth := len(fmt.Sprint(len(labels)))
 	var lines []line
-	if start > 0 {
-		lines = append(lines, line{gui.Colored(fmt.Sprintf("  ↑ %d more", start), gui.Muted)})
-	}
 	for i := start; i < end; i++ {
 		num := fmt.Sprintf("%*d", numWidth, i+1)
 		label := fmt.Sprintf("%-*s", width, labels[i])
@@ -100,9 +105,6 @@ func (m *model) entries(labels, details []string, marked []bool, cursor int) []l
 		} else {
 			lines = append(lines, line{gui.Plain("  "), gui.Strong(num+gap[:1], gui.Accent), gui.Plain(gap[1:] + label), gui.Colored("   "+detail, gui.Muted)})
 		}
-	}
-	if end < len(labels) {
-		lines = append(lines, line{gui.Colored(fmt.Sprintf("  ↓ %d more", len(labels)-end), gui.Muted)})
 	}
 	return lines
 }
