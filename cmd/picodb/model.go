@@ -70,6 +70,9 @@ type model struct {
 	gridLeft   int           // first column shown
 	favCols    bool          // Select all shows only the favourite columns
 	marked     map[int][]any // rows marked in Select all, by number in the table (from 0)
+	gridCol    int           // selected column of Select all, among those shown
+	sortCol    int           // column (in the table) Select all is ordered by; -1 the primary key
+	sortDesc   bool          // ordered by sortCol descending
 	colCursor  int           // selected column of the table page
 	tableTop   int           // first line shown of the table page
 	tableLines []string
@@ -211,11 +214,11 @@ func (m *model) Key(k string) {
 		case gui.KeyPageDown:
 			m.gridPage(true)
 		case gui.KeyLeft:
-			m.gridLeft = max(m.gridLeft-1, 0)
+			m.gridCol = max(m.gridCol-1, 0)
 		case gui.KeyRight:
-			m.gridLeft = min(m.gridLeft+1, max(len(m.shownColumns())-1, 0))
+			m.gridCol = min(m.gridCol+1, max(len(m.shownColumns())-1, 0))
 		case gui.KeyHome:
-			m.gridTop, m.gridCursor, m.gridLeft = 0, 0, 0
+			m.gridTop, m.gridCursor, m.gridLeft, m.gridCol = 0, 0, 0, 0
 		}
 
 	case screenForm:
@@ -282,7 +285,7 @@ func (m *model) Rune(r rune) {
 		case '1':
 			m.showCreate()
 		case '2':
-			m.selectAll(0, 0, 0)
+			m.readRows(0, 0, 0, -1, false)
 		case '3':
 			m.toggleFavourite()
 		case 'n', 'p':
@@ -312,8 +315,10 @@ func (m *model) Rune(r rune) {
 			m.marked = nil
 		case 'f':
 			if m.hasFavColumns(true) {
-				m.favCols, m.gridLeft = !m.favCols, 0
+				m.toggleFavCols()
 			}
+		case 'o':
+			m.toggleOrder()
 		case 'c':
 			m.copyRow(rowText, textRows)
 		case 'j':
@@ -1249,11 +1254,24 @@ func (m *model) gridPage(down bool) {
 	}
 }
 
-// selectAll reads a page of the table and selects its row at cursor, showing it from row top.
+// selectAll reads a page of the table in the order in use and selects its row at cursor,
+// showing it from row top.
 func (m *model) selectAll(page, cursor, top int) {
+	m.readRows(page, cursor, top, m.sortCol, m.sortDesc)
+}
+
+// readRows reads a page of the table ordered by column sortCol (-1 the primary key),
+// descending when desc, and selects its row at cursor, showing it from row top. Opening
+// Select all it shows the favourite columns, when there are some, and selects the
+// primary key one.
+func (m *model) readRows(page, cursor, top, sortCol int, desc bool) {
 	t := m.table
+	order := ""
+	if sortCol >= 0 {
+		order = orderColumn(m.eng, t, sortCol, desc)
+	}
 	m.run(fmt.Sprintf("Reading page %d of %s…", page+1, t.full()), queryTimeout, func(ctx context.Context) (func(), error) {
-		rows, err := readPage(ctx, m.eng, m.db, t, page)
+		rows, err := readPage(ctx, m.eng, m.db, t, page, order)
 		if err != nil {
 			return nil, err
 		}
@@ -1265,14 +1283,90 @@ func (m *model) selectAll(page, cursor, top int) {
 			m.page, m.rows = page, rows
 			m.gridCursor = min(cursor, len(rows)-1)
 			m.gridTop = top
+			m.sortCol, m.sortDesc = sortCol, desc
 			if m.screen != screenData {
 				m.gridLeft = 0
 				m.favCols = m.hasFavColumns(false)
 				m.marked = nil
+				m.gridCol = m.keyColumn()
 			}
 			m.screen = screenData
 		}, nil
 	})
+}
+
+// pkColumn is the index in the table of the first primary key column, or -1.
+func (m *model) pkColumn() int {
+	pk := m.table.primaryKey()
+	if len(pk) == 0 {
+		return -1
+	}
+	return slices.IndexFunc(m.table.Columns, func(c column) bool { return c.Name == pk[0] })
+}
+
+// keyColumn is where the first primary key column is among the columns shown, or 0.
+func (m *model) keyColumn() int {
+	return max(slices.Index(m.shownColumns(), m.pkColumn()), 0)
+}
+
+// toggleFavCols switches Select all between all the columns and the favourites, keeping
+// the selected column when it is still shown.
+func (m *model) toggleFavCols() {
+	shown := m.shownColumns()
+	col := -1
+	if m.gridCol < len(shown) {
+		col = shown[m.gridCol]
+	}
+	m.favCols, m.gridLeft = !m.favCols, 0
+	if i := slices.Index(m.shownColumns(), col); i >= 0 {
+		m.gridCol = i
+	} else {
+		m.gridCol = m.keyColumn()
+	}
+}
+
+// toggleOrder orders Select all by the selected column: ascending, then descending, then
+// back to the primary key. It starts again from the first row and unmarks the rows.
+func (m *model) toggleOrder() {
+	shown := m.shownColumns()
+	if m.gridCol >= len(shown) {
+		return
+	}
+	col := shown[m.gridCol]
+	current := m.sortCol
+	if current < 0 {
+		current = m.pkColumn()
+	}
+	sortCol, desc := col, false
+	switch {
+	case col == current && !m.sortDesc:
+		desc = true
+	case col == current, col == m.pkColumn():
+		sortCol = -1
+	case unsortable[m.table.Columns[col].Base]:
+		m.fail("Can't order by a " + m.table.Columns[col].Type + " column")
+		return
+	}
+	m.marked = nil
+	m.readRows(0, 0, 0, sortCol, desc)
+}
+
+// sortArrow is the arrow of column j (in the table) in the header of Select all, or "".
+func (m *model) sortArrow(j int) string {
+	arrow := "▲"
+	if m.sortDesc {
+		arrow = "▼"
+	}
+	if m.sortCol < 0 || m.sortCol == m.pkColumn() {
+		if slices.Contains(m.table.primaryKey(), m.table.Columns[j].Name) {
+			return arrow
+		}
+		return ""
+	}
+	if j == m.sortCol {
+		return arrow
+	}
+	return ""
 }
 
 // exportForm asks the file and then writes all rows of the table in it.

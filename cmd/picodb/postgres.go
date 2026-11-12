@@ -290,10 +290,13 @@ func (e postgres) describe(ctx context.Context, db *sql.DB, t table) (*tableInfo
 	return info, rows.Err()
 }
 
-// selectAll orders by primary key, otherwise as PostgreSQL returns the rows.
-func (e postgres) selectAll(t *tableInfo, page int) string {
+// selectAll orders by order or the primary key, otherwise as PostgreSQL returns the rows.
+func (e postgres) selectAll(t *tableInfo, page int, order string) string {
 	q := "SELECT " + columnList(e, t) + " FROM " + quoted(e, t.table)
-	if order := orderBy(e, t); order != "" {
+	if order == "" {
+		order = orderBy(e, t)
+	}
+	if order != "" {
 		q += " ORDER BY " + order
 	}
 	if page >= 0 {

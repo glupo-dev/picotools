@@ -284,9 +284,11 @@ func msTypeText(base string, maxLen, prec, scale int) string {
 	return base
 }
 
-// selectAll orders by primary key, otherwise as SQL Server returns the rows.
-func (e sqlServer) selectAll(t *tableInfo, page int) string {
-	order := orderBy(e, t)
+// selectAll orders by order or the primary key, otherwise as SQL Server returns the rows.
+func (e sqlServer) selectAll(t *tableInfo, page int, order string) string {
+	if order == "" {
+		order = orderBy(e, t)
+	}
 	if order == "" {
 		order = "(SELECT NULL)"
 	}

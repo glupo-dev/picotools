@@ -376,8 +376,13 @@ func (m *model) renderData() []line {
 	cells := make([][]string, len(m.rows))
 	nulls := make([][]bool, len(m.rows))
 	widths := make([]int, len(cols))
+	names := make([]string, len(cols))
 	for j, c := range cols {
-		widths[j] = min(len([]rune(c.Name)), maxCell)
+		names[j] = gui.Truncate(c.Name, maxCell)
+		if a := m.sortArrow(shownCols[j]); a != "" {
+			names[j] = a + " " + names[j]
+		}
+		widths[j] = len([]rune(names[j]))
 	}
 	for i, r := range m.rows {
 		cells[i] = make([]string, len(cols))
@@ -394,18 +399,31 @@ func (m *model) renderData() []line {
 	}
 	numWidth := len(fmt.Sprint(last))
 
-	// The columns that fit, from gridLeft.
-	end := m.gridLeft
-	used := numWidth + 2
-	for end < len(cols) && (end == m.gridLeft || used+widths[end]+2 <= m.cols-2) {
-		used += widths[end] + 2
-		end++
+	// The columns that fit, from gridLeft, scrolled to keep the selected one in view.
+	fit := func(left int) int {
+		end, used := left, numWidth+2
+		for end < len(cols) && (end == left || used+widths[end]+2 <= m.cols-2) {
+			used += widths[end] + 2
+			end++
+		}
+		return end
+	}
+	m.gridCol = max(min(m.gridCol, len(cols)-1), 0)
+	m.gridLeft = max(min(m.gridLeft, m.gridCol), 0)
+	end := fit(m.gridLeft)
+	for m.gridCol >= end && m.gridLeft < m.gridCol {
+		m.gridLeft++
+		end = fit(m.gridLeft)
 	}
 
 	pad := func(s string, w int) string { return s + strings.Repeat(" ", max(w-len([]rune(s)), 0)) }
 	header := line{gui.Plain(strings.Repeat(" ", numWidth+2))}
 	for j := m.gridLeft; j < end; j++ {
-		header = append(header, gui.Strong(pad(gui.Truncate(cols[j].Name, maxCell), widths[j])+"  ", gui.Accent))
+		name := gui.Strong(pad(names[j], widths[j]), gui.Accent)
+		if j == m.gridCol {
+			name.Bg = gui.SelectedBg
+		}
+		header = append(header, name, gui.Plain("  "))
 	}
 	lines = append(lines, header)
 
@@ -443,9 +461,10 @@ func (m *model) renderData() []line {
 	}
 
 	hint := "↑/↓ move · n/p or pgdn/pgup page"
-	if end-m.gridLeft < len(cols) {
-		hint += fmt.Sprintf(" · ←/→ columns (%d–%d of %d)", m.gridLeft+1, end, len(cols))
+	if len(cols) > 1 {
+		hint += fmt.Sprintf(" · ←/→ column (%d of %d)", m.gridCol+1, len(cols))
 	}
+	hint += " · o order by"
 	if m.hasFavColumns(true) {
 		if m.favCols {
 			hint += " · f all columns"

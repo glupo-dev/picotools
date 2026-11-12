@@ -35,8 +35,9 @@ type engine interface {
 
 	quote(name string) string
 	createScript(t *tableInfo) string
-	// selectAll is the query of all rows in a stable order; with page >= 0 only that page.
-	selectAll(t *tableInfo, page int) string
+	// selectAll is the query of all rows in a stable order, or by order when it is not
+	// empty; with page >= 0 only that page.
+	selectAll(t *tableInfo, page int, order string) string
 	// text writes a value as it is shown and exported to CSV; null says it is NULL.
 	text(v any, base string) (s string, null bool)
 	// literal writes a value as SQL, for the INSERT scripts.
@@ -162,12 +163,46 @@ func orderBy(e engine, t *tableInfo) string {
 	return strings.Join(pk, ", ")
 }
 
+// unsortable are the types a query cannot order by.
+var unsortable = map[string]bool{
+	"text": true, "ntext": true, "image": true, "xml": true, "geography": true, "geometry": true,
+	"json": true, "point": true, "line": true, "lseg": true, "box": true, "path": true, "polygon": true, "circle": true,
+}
+
+// orderColumn is the ORDER BY of Select all by column col (index in t.Columns), descending
+// when desc: by the first primary key column it is the whole key in that direction;
+// otherwise the column, then the primary key or, without one, the other columns that can
+// be ordered, so that the pages stay the same.
+func orderColumn(e engine, t *tableInfo, col int, desc bool) string {
+	dir := ""
+	if desc {
+		dir = " DESC"
+	}
+	pk := t.primaryKey()
+	if len(pk) > 0 && t.Columns[col].Name == pk[0] {
+		for i, k := range pk {
+			pk[i] = e.quote(k) + dir
+		}
+		return strings.Join(pk, ", ")
+	}
+	parts := []string{e.quote(t.Columns[col].Name) + dir}
+	if len(pk) > 0 {
+		return strings.Join(parts, ", ") + ", " + orderBy(e, t)
+	}
+	for j, c := range t.Columns {
+		if j != col && !unsortable[c.Base] {
+			parts = append(parts, e.quote(c.Name))
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
 // pageSize is how many rows a page of "Select all" shows.
 const pageSize = 50
 
 // readPage reads one page of rows; each value is as the driver gives it.
-func readPage(ctx context.Context, e engine, db *sql.DB, t *tableInfo, page int) ([][]any, error) {
-	rows, err := db.QueryContext(ctx, e.selectAll(t, page))
+func readPage(ctx context.Context, e engine, db *sql.DB, t *tableInfo, page int, order string) ([][]any, error) {
+	rows, err := db.QueryContext(ctx, e.selectAll(t, page, order))
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +273,7 @@ func exportRows(ctx context.Context, e engine, db *sql.DB, t *tableInfo, kind in
 		bw.WriteString(e.beforeInserts(t))
 	}
 
-	rows, err := db.QueryContext(ctx, e.selectAll(t, -1))
+	rows, err := db.QueryContext(ctx, e.selectAll(t, -1, ""))
 	if err != nil {
 		return 0, err
 	}

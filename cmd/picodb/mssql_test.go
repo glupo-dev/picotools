@@ -42,13 +42,13 @@ CREATE NONCLUSTERED INDEX [IX_Orders_Customer] ON [dbo].[Orders] ([CustomerId] D
 
 func TestSelectAll(t *testing.T) {
 	want := "SELECT [OrderId], [CustomerId], [Total], [Notes], [Twice] FROM [dbo].[Orders] ORDER BY [OrderId] OFFSET 100 ROWS FETCH NEXT 50 ROWS ONLY"
-	if got := (sqlServer{}).selectAll(orders(), 2); got != want {
+	if got := (sqlServer{}).selectAll(orders(), 2, ""); got != want {
 		t.Errorf("got %s", got)
 	}
 	o := orders()
 	o.Indexes = nil
 	want = "SELECT [OrderId], [CustomerId], [Total], [Notes], [Twice] FROM [dbo].[Orders] ORDER BY (SELECT NULL)"
-	if got := (sqlServer{}).selectAll(o, -1); got != want {
+	if got := (sqlServer{}).selectAll(o, -1, ""); got != want {
 		t.Errorf("got %s", got)
 	}
 }

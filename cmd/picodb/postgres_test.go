@@ -84,7 +84,7 @@ func TestPostgresPagila(t *testing.T) {
 	if len(info.FKs) != 2 || info.FKs[0].RefTable != "public.language" {
 		t.Errorf("foreign keys %+v", info.FKs)
 	}
-	page, err := readPage(ctx, e, db, info, 1)
+	page, err := readPage(ctx, e, db, info, 1, "")
 	if err != nil || len(page) != pageSize {
 		t.Fatalf("page: %d rows, %v", len(page), err)
 	}
