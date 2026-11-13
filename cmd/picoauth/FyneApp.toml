@@ -1,0 +1,6 @@
+[Details]
+Icon = "assets/icon.png"
+Name = "Pico Auth"
+ID = "local.picoauth"
+Version = "1.0.0"
+Build = 3

@@ -36,6 +36,16 @@ its `CREATE TABLE`, and all its rows, 50 per page.
 Rows can be exported to CSV, `INSERT`, or `DROP` + `CREATE` + `INSERT`.
 It only reads: it has no SQL prompt, and the scripts it writes are text for you, never run.
 
+### Pico Auth
+The two-factor codes (TOTP) of your accounts on the computer, next to the phone app.
+When a service turns on two-factor authentication, paste its secret key or `otpauth://` address
+here as well as scanning the QR code with the phone: both then make the same codes.
+Enter copies a code, and it leaves the clipboard after 30 seconds.
+The accounts are in a file encrypted with a master password (Argon2id + AES-256-GCM);
+the keychain remembers the password, so it is typed only the first time and on a new computer.
+Export, always behind the master password: an encrypted backup to move to another computer,
+or an `otpauth://` list in plain text to import into another authenticator app.
+
 ### Pico Edit
 A simple text editor driven by the keyboard, in the spirit of vi but without its modes:
 esc opens a command line with `w` save, `e` open, `q` quit, `wq`, `cd`, `mkdir`, `pwd`.
@@ -45,12 +55,14 @@ The system shell (zsh on Mac, PowerShell on Windows) in its own window.
 
 ## Where things are saved
 
-Only Pico API and Pico DB save something:
+Only Pico API, Pico DB and Pico Auth save something:
 
 - Saved items (providers, endpoints, connections): one JSON file per app in the standard app folder
   (`~/Library/Application Support/` on Mac, `%AppData%` on Windows).
 - Secrets (API keys, connection strings): the system keychain
   (Keychain on Mac, Credential Manager on Windows).
+- Pico Auth: its accounts in one encrypted file (`picoauth/vault.picoauth` in the same app folder),
+  its master password in the system keychain.
 
 ## Build
 
