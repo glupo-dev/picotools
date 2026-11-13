@@ -346,8 +346,7 @@ func (m *model) copyCode(i int) {
 func (m *model) addForm() {
 	var acc *Account
 	m.ask("New account", []question{{
-		label:  "Secret key or otpauth:// address (paste it)",
-		secret: true,
+		label: "Secret key or otpauth:// address (paste it)",
 		check: func(v string, _ []string) string {
 			a, err := parseInput(v)
 			if err != nil {
