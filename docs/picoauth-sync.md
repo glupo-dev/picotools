@@ -7,16 +7,20 @@ Not everything here was agreed: the status of each point is the label it carries
 
 **State on 2026-11-14: the whole sync is written** (code in `cmd/picoauth`, section 11), in four blocks
 (section 13); the code is pushed to `main`.
-- Block 1, link the first computer: **tried by the author** with the real GitHub. The author's Mac is
-  linked: its vault is in `genlupo/picoauth-vault`.
-- Blocks 2 (add another computer), 3 (keep them aligned) and 4 (delete, unlink, linked devices): tested
-  only against a fake GitHub in the tests. **Not tried for real**: the author will try them **all
-  together** when the Windows PC of work is at hand (the test list is in section 13).
+- Block 1, link the first computer: **tried by the author** with the real GitHub (`genlupo/picoauth-vault`).
+- Block 4: "Reset this device" (first called "Unlink this device") **tried for real** on 2026-11-14: the
+  author reset the Mac to try glupo.dev (its vault was a test vault). **So today no device is linked to
+  GitHub**: the encrypted `vault.picoauth` left in `genlupo/picoauth-vault` cannot be opened by anyone
+  (keep it, delete it or delete the repository: the author's choice).
+- Blocks 2 (add another computer) and 3 (keep them aligned): tested only against a fake GitHub. The test
+  of section 13 needs a device linked to GitHub again (a new vault, after deleting `vault.picoauth` from
+  the repository).
 - On GitHub everything is ready: the GitHub App is registered (section 2.1), the repository is created
   and the app is installed on it (section 2.2).
 - Export and restore were removed from the code (section 8).
-- A **second sync through glupo.dev**, next to this one, is designed (not built) in
-  [picoauth-glupo-sync.md](picoauth-glupo-sync.md).
+- A **second sync through glupo.dev**, next to this one, is **in production** (first device; adding a
+  device not written yet): [picoauth-glupo-sync.md](picoauth-glupo-sync.md). The file operations of this
+  document's code go through `remotes` (`glupo.go`), to GitHub or glupo.dev by the link.
 
 Each point is marked:
 - **Decided**: agreed with the author.
@@ -298,10 +302,11 @@ description under it (the author asked for the blank line):
 Settings                                Settings
 
   1  Sync with GitHub                   Synced with GitHub: genlupo/picoauth-vault
-  2  Delete this vault
-                                          1  Reset this device
+  2  Sync with glupo.dev
+  3  Delete this vault                    1  Reset this device
                                           2  Linked devices
 ```
+(Since 2026-11-14 `2 Sync with glupo.dev` is there too and Delete is `3`: picoauth-glupo-sync.md.)
 
 Both ask to type `delete` and the master password (the rules in this section). Written in block 4: both remove
 from this computer the vault file, `sync.json`, and from the keychain the master password, the second
@@ -479,7 +484,7 @@ Consequences (facts, said to the author):
   does not see his. Each has their own master password and second key.
 - Who does not want GitHub uses Pico Auth standalone (on one computer only, section 8). Note
   (2026-11-14): with the backup removed, a standalone vault is lost if its computer breaks, so in practice
-  the sync is also the safety copy; this is why a sync through glupo.dev is planned (below).
+  the sync is also the safety copy; this is why a sync through glupo.dev was added (below).
 - **To do before giving it to others**: the presentation page at `https://picoauth.glupo.dev`, the
   Homepage URL of the app (see 2.1).
 - **2026-11-14, in practice:** the GitHub setup (private repository, "install" the GitHub App) proved too
@@ -493,7 +498,7 @@ Consequences (facts, said to the author):
 Sync and storage:
 - Cloud-drive folders (Dropbox, OneDrive, iCloud, Google Drive): "piuttosto GitHub con tutte le sue
   contorsioni". The author confirmed on 2026-11-14 that this phrase was about these services only, not
-  about the VPS (the VPS is now the planned second sync, [picoauth-glupo-sync.md](picoauth-glupo-sync.md)).
+  about the VPS (the VPS now holds the second sync, [picoauth-glupo-sync.md](picoauth-glupo-sync.md)).
 - git (clone, pull, push): Pico Auth does not use git.
 - GitHub tokens created by hand on each computer: too contorted (replaced by the GitHub App login).
 - A typed "secret key" as second factor: it is a second password.
@@ -542,6 +547,9 @@ All in `cmd/picoauth` (Go, Fyne GUI through `picotools/internal/gui`):
   conflicts, offline, and `checkRemote`, the 10-second check (newer vault, requests, device file).
 - `computers.go`: the devices list of 5.1 (`computers/<id>.json`, since and last).
 - `forget.go`: delete this vault and reset this device (unlink).
+- `glupo.go`, `glupolink.go`: the second sync, through glupo.dev ([picoauth-glupo-sync.md](picoauth-glupo-sync.md)
+  section 11). Every file operation of the files above goes through `remotes` (in `glupo.go`), which
+  calls GitHub or glupo.dev by the link; so "GitHub" in sections 5 to 7 means "the service of the link".
 - `model.go` / `render.go`: screens and keys. First start `screenStart` with two pages (section 4).
   Keys of the list: `n` new, `m` rename, `d` delete, `s` settings, `enter`/`1-9` copy, `↑/↓`, `esc`/`q`.
 - `totp.go`, `form.go`, `main.go`: codes and `otpauth://`, question forms, window and 1-second tick.
@@ -580,8 +588,9 @@ Technical points never discussed with the author (to decide when building, do no
     settings), since accounts have no id: renamed here and deleted on another computer gives "the
     account was deleted on another computer" (the delete wins, not "the last operation wins" written
     in section 7); deleted on both is fine.
-  - Without GitHub (no connection, GitHub down): "No connection to GitHub: nothing was changed. The
-    codes still work." The checks fail silently and try again.
+  - Without GitHub (no connection, GitHub down): "Cannot reach GitHub: the change was not saved. Try
+    again later." (text chosen by the author on 2026-11-14, for both services; before: "No connection to
+    GitHub: nothing was changed. The codes still work."). The checks fail silently and try again.
   - If GitHub no longer accepts the access (the refresh too), a change opens the browser login again,
     then is saved.
 - **Proposed and written in block 1** (to confirm with the author): the vault key is Argon2id on the
@@ -629,14 +638,15 @@ try in the app:
 4. **Delete and unlink** (section 5). **Written 2026-11-14, to try.** Then the list of linked devices
    (5.1), written 2026-11-14.
 
-**Next step: the author tries blocks 2, 3 and 4 together** with the Windows PC
+**Not possible as written since 2026-11-14** (the Mac was reset from GitHub, see the state at the top):
+first link a device to GitHub again. **Planned next step was: the author tries blocks 2, 3 and 4 together** with the Windows PC
 (`dist/windows/picoauth.exe`), the Mac open on the account list:
 1. PC: first start → `2 Open an existing vault` → `1 From GitHub` → browser login (enter copies the code).
 2. PC shows a 6-digit code; Mac, within about 10 seconds, shows the request: same code → `y` + master
    password. PC asks the master password once and shows the accounts. (Also try `n`: the PC shows
    "Request refused or expired".)
 3. A change on one (add, rename, delete) appears on the other within about 10 seconds.
-4. With Wi-Fi off a change is refused with "No connection to GitHub", the codes still work.
+4. With Wi-Fi off a change is refused with "Cannot reach GitHub: the change was not saved. Try again later.", the codes still work.
 5. Settings → `2 Linked devices` shows both, with since and last.
 6. Unlink only **after** both are linked, and unlink the **PC**, not the Mac: the Mac is today the only
    linked device, unlinking it would leave nobody able to open the vault on GitHub. To use the PC again
