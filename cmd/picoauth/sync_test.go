@@ -685,7 +685,7 @@ func TestOffline(t *testing.T) {
 	mac.Rune('d')
 	mac.Rune('y')
 	mac.until(t, func() bool { return !mac.saving })
-	if !strings.Contains(mac.text(), "No connection to GitHub") || len(mac.vault.Accounts) != 1 {
+	if !strings.Contains(mac.text(), "Cannot reach GitHub: the change was not saved. Try again later.") || len(mac.vault.Accounts) != 1 {
 		t.Fatal(mac.text())
 	}
 	after, _ := os.ReadFile(mac.path)
@@ -734,10 +734,10 @@ func TestDeleteVault(t *testing.T) {
 	tm.typ("master-pw")
 	tm.typ("master-pw")
 	tm.Rune('s')
-	if !strings.Contains(tm.text(), "2  Delete this vault") {
+	if !strings.Contains(tm.text(), "3  Delete this vault") {
 		t.Fatal(tm.text())
 	}
-	tm.Rune('2')
+	tm.Rune('3')
 	tm.typ("yes")
 	if !strings.Contains(tm.text(), "Type delete") {
 		t.Fatal(tm.text())
@@ -768,7 +768,7 @@ func TestDeleteVault(t *testing.T) {
 	tm.typ("master-pw")
 	tm.typ("master-pw")
 	tm.Rune('s')
-	tm.Rune('2')
+	tm.Rune('3')
 	tm.Key(gui.KeyEsc)
 	if tm.screen != screenSettings || tm.vault == nil {
 		t.Fatal(tm.text())

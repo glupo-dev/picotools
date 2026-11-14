@@ -78,6 +78,8 @@ func (m *model) settingsRune(r rune) {
 	case m.link == nil && r == '1':
 		m.startLink()
 	case m.link == nil && r == '2':
+		m.startGlupoLink()
+	case m.link == nil && r == '3':
 		m.deleteVaultForm()
 	case m.link != nil && r == '1':
 		m.unlinkForm()
@@ -178,7 +180,7 @@ func (m *model) linkTo(v *syncView, repo string) {
 	ctx, later := v.ctx, v.later
 	v.repos, v.msg = nil, "Checking "+repo+"…"
 	go func() {
-		_, _, err := m.gh.getFile(ctx, repo, vaultFile)
+		_, _, err := m.rs.getFile(ctx, repo, vaultFile)
 		later(func() {
 			switch {
 			case err == nil:
@@ -207,7 +209,7 @@ func (m *model) linkTo(v *syncView, repo string) {
 			}
 			v.msg = "Uploading the vault to " + repo + "…"
 			go func() {
-				sha, err := m.gh.putFile(ctx, repo, vaultFile, data, "", "Pico Auth: first upload of the vault")
+				sha, err := m.rs.putFile(ctx, repo, vaultFile, data, "", "Pico Auth: first upload of the vault")
 				later(func() { m.linked(v, repo, sha, second, data, err) })
 			}()
 		})
@@ -225,18 +227,22 @@ func (m *model) linked(v *syncView, repo, sha string, second, data []byte, err e
 		return
 	}
 	if err := writeFile(m.path, data); err != nil {
-		v.err = "The vault is on GitHub, but this device could not save it: " + err.Error()
+		v.err = "The vault is on " + where(repo) + ", but this device could not save it: " + err.Error()
 		return
 	}
 	m.vault.setSecond(second)
 	l := &linkState{Repo: repo, SHA: sha}
 	if err := l.save(m.path); err != nil {
-		v.err = "The vault is on GitHub, but this device could not remember the link: " + err.Error()
+		v.err = "The vault is on " + where(repo) + ", but this device could not remember the link: " + err.Error()
 		return
 	}
 	m.link = l
+	m.glupoCreds()
 	m.register()
 	v.msg, v.done = "", "This vault is now on GitHub, in "+repo
+	if isGlupo(repo) {
+		v.done = "This vault is now on glupo.dev, in the account " + glupoUser(repo)
+	}
 }
 
 func (m *model) syncKey(k string) {
@@ -277,10 +283,10 @@ func (m *model) renderSettings() []line {
 	lines := []line{{gui.Strong("Settings", nil)}, nil}
 	if m.link != nil {
 		lines = append(lines,
-			line{gui.Plain("Synced with GitHub: "), gui.Strong(m.link.Repo, gui.ValueFg)},
+			m.syncedLine(),
 			nil,
 			line{gui.Plain("  "), gui.Strong("1", gui.Accent), gui.Plain("  Reset this device")},
-			line{gui.Colored("     The vault stays on GitHub.", gui.Muted)},
+			line{gui.Colored("     The vault stays on "+m.where()+".", gui.Muted)},
 			nil,
 			line{gui.Plain("  "), gui.Strong("2", gui.Accent), gui.Plain("  Linked devices")},
 			line{gui.Colored("     The devices that have this vault.", gui.Muted)},
@@ -291,10 +297,21 @@ func (m *model) renderSettings() []line {
 		line{gui.Plain("  "), gui.Strong("1", gui.Accent), gui.Plain("  Sync with GitHub")},
 		line{gui.Colored("     Put this vault in a private GitHub repository of yours, to have it on your other devices.", gui.Muted)},
 		nil,
-		line{gui.Plain("  "), gui.Strong("2", gui.Accent), gui.Plain("  Delete this vault")},
+		line{gui.Plain("  "), gui.Strong("2", gui.Accent), gui.Plain("  Sync with glupo.dev")},
+		line{gui.Colored("     Put this vault on glupo.dev with an invite code, to have it on your other devices.", gui.Muted)},
+		nil,
+		line{gui.Plain("  "), gui.Strong("3", gui.Accent), gui.Plain("  Delete this vault")},
 		line{gui.Colored("     Delete the vault and its accounts from this device, to start again.", gui.Muted)},
 	)
 	return append(lines, m.footer("number choose · esc back")...)
+}
+
+// syncedLine says where this vault is synced.
+func (m *model) syncedLine() line {
+	if isGlupo(m.link.Repo) {
+		return line{gui.Plain("Synced with glupo.dev: "), gui.Strong(glupoUser(m.link.Repo), gui.ValueFg)}
+	}
+	return line{gui.Plain("Synced with GitHub: "), gui.Strong(m.link.Repo, gui.ValueFg)}
 }
 
 func (m *model) renderSync() []line {

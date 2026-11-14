@@ -37,6 +37,8 @@ type model struct {
 	path  string     // the vault file
 	link  *linkState // the GitHub link of this computer, nil if not linked
 	gh    *github
+	gl    *glupo
+	rs    remotes // the file operations, to GitHub or glupo.dev by the link
 	sync  *syncView
 
 	startPage   int // first start: 0 the main menu, 1 open an existing vault
@@ -78,6 +80,7 @@ type model struct {
 }
 
 func newModel(path string) *model {
+	gh, gl := newGitHub(), newGlupo()
 	return &model{
 		path:       path,
 		cols:       gui.DefaultCols,
@@ -87,7 +90,9 @@ func newModel(path string) *model {
 		now:        time.Now,
 		ui:         func(f func()) { f() },
 		openURL:    func(string) {},
-		gh:         newGitHub(),
+		gh:         gh,
+		gl:         gl,
+		rs:         remotes{gh: gh, gl: gl},
 		checkEvery: checkEvery,
 		handled:    map[string]bool{},
 		background: context.Background(),

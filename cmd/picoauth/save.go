@@ -66,6 +66,7 @@ func (m *model) apply(c change, done func()) {
 
 // upload sends the changed vault to GitHub, replacing the version read last.
 func (m *model) upload(c change, accs []*Account, done func(), attempt int) {
+	m.glupoCreds()
 	cp := *m.vault
 	cp.Accounts = accs
 	data, err := cp.encrypted()
@@ -74,13 +75,13 @@ func (m *model) upload(c change, accs []*Account, done func(), attempt int) {
 		return
 	}
 	m.saving = true
-	m.status = gui.Line{gui.Colored("Saving on GitHub…", gui.Muted)}
+	m.status = gui.Line{gui.Colored("Saving on "+m.where()+"…", gui.Muted)}
 	repo, sha, ctx := m.link.Repo, m.link.SHA, m.background
 	go func() {
-		newSHA, err := m.gh.putFile(ctx, repo, vaultFile, data, sha, "Pico Auth: vault changed")
+		newSHA, err := m.rs.putFile(ctx, repo, vaultFile, data, sha, "Pico Auth: vault changed")
 		var raw []byte
 		if errors.Is(err, errConflict) && attempt < maxRetries {
-			raw, newSHA, err = m.gh.getFile(ctx, repo, vaultFile)
+			raw, newSHA, err = m.rs.getFile(ctx, repo, vaultFile)
 			if err == nil {
 				err = errConflict
 			}
@@ -95,7 +96,7 @@ func (m *model) upload(c change, accs []*Account, done func(), attempt int) {
 			case errors.Is(err, errConflict) && raw != nil:
 				// Another computer saved meanwhile: take its vault and do the change again on it.
 				if err := m.applyRemote(raw, newSHA); err != nil {
-					m.warn("Could not read the newer vault on GitHub, nothing was changed: " + err.Error())
+					m.warn("Could not read the newer vault on " + where(repo) + ", nothing was changed: " + err.Error())
 					return
 				}
 				accs, err := c(cloneAccounts(m.vault.Accounts))
@@ -105,14 +106,14 @@ func (m *model) upload(c change, accs []*Account, done func(), attempt int) {
 				}
 				m.upload(c, accs, done, attempt+1)
 			case errors.Is(err, errLoginNeeded):
-				m.relogin(func() { m.apply(c, done) })
+				m.loginNeeded(func() { m.apply(c, done) })
 			case offline(err):
-				m.warn("No connection to GitHub: nothing was changed. The codes still work.")
+				m.warn("Cannot reach " + where(repo) + ": the change was not saved. Try again later.")
 			case err != nil:
-				m.warn("Could not save on GitHub, nothing was changed: " + err.Error())
+				m.warn("Could not save on " + where(repo) + ", nothing was changed: " + err.Error())
 			default:
 				if err := writeFile(m.path, data); err != nil {
-					m.warn("Saved on GitHub, but not on this device: " + err.Error())
+					m.warn("Saved on " + where(repo) + ", but not on this device: " + err.Error())
 				}
 				m.vault.Accounts = accs
 				m.link.SHA = newSHA
@@ -158,13 +159,14 @@ func (m *model) checkRemote() {
 	if m.link == nil || m.vault == nil || m.vault.second == nil || m.checking || m.saving || m.screen != screenList {
 		return
 	}
+	m.glupoCreds()
 	m.register()
 	m.markUsed()
 	m.checking = true
 	repo, sha, ctx, now := m.link.Repo, m.link.SHA, m.background, m.now()
 	go func() {
 		// One call tells both: the version of the vault and whether there are requests.
-		es, err := m.gh.listDir(ctx, repo, "")
+		es, err := m.rs.listDir(ctx, repo, "")
 		var raw []byte
 		var newSHA string
 		var found []*pendingRequest
@@ -172,7 +174,7 @@ func (m *model) checkRemote() {
 			for _, e := range es {
 				switch {
 				case e.Name == vaultFile && e.SHA != sha:
-					raw, newSHA, _ = m.gh.getFile(ctx, repo, vaultFile)
+					raw, newSHA, _ = m.rs.getFile(ctx, repo, vaultFile)
 				case e.Name == requestsDir && e.Type == "dir":
 					found = m.fetchRequests(ctx, repo, now)
 				}
@@ -185,7 +187,7 @@ func (m *model) checkRemote() {
 			}
 			if raw != nil && newSHA != m.link.SHA {
 				if err := m.applyRemote(raw, newSHA); err != nil {
-					m.warn("Could not read the newer vault on GitHub: " + err.Error())
+					m.warn("Could not read the newer vault on " + where(repo) + ": " + err.Error())
 				}
 			}
 			m.showRequest(found)

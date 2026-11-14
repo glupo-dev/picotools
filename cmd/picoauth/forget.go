@@ -26,7 +26,8 @@ func (m *model) deleteVaultForm() {
 // Unlinking needs GitHub, like every change of a linked vault: the file of this computer
 // is deleted from computers/, so the list stays right.
 func (m *model) unlinkForm() {
-	m.status = gui.Line{gui.Colored("Reading the linked devices from GitHub…", gui.Muted)}
+	m.glupoCreds()
+	m.status = gui.Line{gui.Colored("Reading the linked devices from "+m.where()+"…", gui.Muted)}
 	l, ctx := m.link, m.background
 	go func() {
 		cs, err := m.fetchComputers(ctx, l.Repo)
@@ -45,9 +46,9 @@ func (m *model) unlinkForm() {
 					others++
 				}
 			}
-			warning := "This removes the vault from this device; it stays on GitHub and on your other devices. Type delete to confirm"
+			warning := "This removes the vault from this device; it stays on " + where(l.Repo) + " and on your other devices. Type delete to confirm"
 			if others == 0 {
-				warning = "This is the only linked device: after this, nobody can open the vault on GitHub any more. Type delete to confirm"
+				warning = "This is the only linked device: after this, nobody can open the vault on " + where(l.Repo) + " any more. Type delete to confirm"
 			}
 			m.confirmForget("Reset this device", warning, func() { m.unlink(l) })
 		})
@@ -62,13 +63,17 @@ func (m *model) unlink(l *linkState) {
 		var err error
 		if l.Computer != "" {
 			var sha string
-			_, sha, err = m.gh.getFile(ctx, l.Repo, computerPath(l.Computer))
+			_, sha, err = m.rs.getFile(ctx, l.Repo, computerPath(l.Computer))
 			if err == nil {
-				err = m.gh.deleteFile(ctx, l.Repo, computerPath(l.Computer), sha, "Pico Auth: a device is unlinked")
+				err = m.rs.deleteFile(ctx, l.Repo, computerPath(l.Computer), sha, "Pico Auth: a device is unlinked")
 			}
 			if errors.Is(err, errNotFound) {
 				err = nil
 			}
+		}
+		// On glupo.dev the token of this device is revoked too.
+		if err == nil && isGlupo(l.Repo) {
+			m.gl.logout(ctx)
 		}
 		m.ui(func() {
 			m.status = nil
@@ -79,7 +84,7 @@ func (m *model) unlink(l *linkState) {
 				m.unlinkFailed(err)
 				return
 			}
-			m.forgotten("This device is reset: the vault is still on GitHub")
+			m.forgotten("This device is reset: the vault is still on " + where(l.Repo))
 		})
 	}()
 }
@@ -87,9 +92,9 @@ func (m *model) unlink(l *linkState) {
 func (m *model) unlinkFailed(err error) {
 	switch {
 	case errors.Is(err, errLoginNeeded):
-		m.relogin(func() { m.screen = screenSettings; m.unlinkForm() })
+		m.loginNeeded(func() { m.screen = screenSettings; m.unlinkForm() })
 	case offline(err):
-		m.warn("No connection to GitHub: nothing was changed. A device is reset only online.")
+		m.warn("No connection to " + m.where() + ": nothing was changed. A device is reset only online.")
 	default:
 		m.warn("Could not reset, nothing was changed: " + err.Error())
 	}
@@ -134,6 +139,7 @@ func (m *model) forgetHere() error {
 	deletePassword()
 	deleteSecond()
 	m.gh.forget()
+	m.gl.forget()
 	m.vault, m.link, m.cursor = nil, nil, 0
 	return nil
 }

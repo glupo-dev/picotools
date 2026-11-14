@@ -6,8 +6,47 @@ Read [picoauth-sync.md](picoauth-sync.md) first: the vault, the second key, the 
 device with the 6-digit code, conflicts and the device list are designed there, and this document reuses
 them without repeating them.
 
-**State on 2026-11-14: design only, nothing is built.** The flow of the first device is defined
-(section 5); the rest are details to settle when building (section 9).
+**State on 2026-11-14: block 1 written, not deployed** (link the first device, section 10, "Written"). The flow of the first
+device is defined (section 5); the server choices are in section 10; the rest are details (section 9).
+
+## 10. Building: decisions of 2026-11-14
+
+The author's Mac was reset from GitHub ("Reset this device") on 2026-11-14 to try glupo.dev: its vault was
+a test vault (two test accounts). The encrypted `vault.picoauth` left in `genlupo/picoauth-vault` cannot
+be opened by anyone; what to do with it (keep, delete the file, delete the repository) is up to the author.
+
+Blocks, each to try in the app: **1** link the first device to glupo.dev (server + Settings);
+**2** keep aligned (upload at every change, 10-second check, conflicts, device list); **3** add another
+device (From glupo.dev, login, approval).
+
+**Decided by the author:**
+- The server is a **separate project**, in **Rust** ("il server non sa cosa sia go"), like the author's
+  other services: **`picoauth-server`**, folder `~/Projects/glupo-dev/picoauth-server`, repository
+  `glupo-dev/picoauth-server` (chosen over `picoauth-rs` and `picoauth-api-rs`; it matches
+  `schule-server`). Deployed like the others (`~/Projects/glupo-dev/netcup/CLAUDE.md`): no Docker, a
+  binary + systemd service behind Caddy.
+- Data in **PostgreSQL** (already on the VPS for idp-rs), not files: account creation and "write only if
+  the version is unchanged" must be all-or-nothing, which is a transaction / `UPDATE ... WHERE version`.
+  The vault is a few KB in a `bytea` column.
+- Address: **`https://api.picoauth.glupo.dev`**, a name of its own (one Caddy block per service, the
+  service can move with one DNS record); `picoauth.glupo.dev` stays the presentation page.
+  `api.glupo.dev/picoauth` was proposed and dropped.
+- Invites: **a command on the server**, like the invites of idp-rs (`picoauth-server invite`); a web page
+  only for the author was left out for now.
+
+**Accepted by the author** ("ok vanno bene"), Claude's proposals for the details of section 9:
+1. No email, only `username`.
+2. `username`: lower case, 3 to 32 characters `a-z 0-9 - _`; Pico Auth lowers it before computing
+   `login_hash`.
+3. `login_hash`: Argon2id with parameters fixed in Pico Auth's code, the same for ever; the server keeps
+   a hash of it, not the value.
+4. Token: does not expire; revoked by "Reset this device" on that device or by the author with a command.
+5. Login attempts: at most 10 a minute per `username`.
+6. API shape: generic files with version (`GET`, `PUT`, `DELETE`, list) on the same paths as GitHub
+   (`vault.picoauth`, `requests/<id>.json`, `answers/<id>.json`, `computers/<id>.json`), so the shared
+   code of Pico Auth does not change; plus endpoints for check, account and login.
+7. Invite code: 8 characters (`K7QM-3XPA`), valid once, no expiry; `picoauth-server invite` creates one,
+   `picoauth-server invites` lists the unused ones.
 
 Each point is marked:
 - **Decided**: agreed with the author.
@@ -246,3 +285,37 @@ author confirms:
 
 Next step: none fixed. The GitHub test with the Windows PC (picoauth-sync.md, 13) is still to do, and it
 also tests the parts shared with glupo.dev.
+
+### Written (2026-11-14), block 1
+
+Tried only on the Mac, against a local PostgreSQL; **not deployed** on the VPS yet (DNS record, Caddy
+block, systemd service, PostgreSQL role: to do with the author).
+
+- **picoauth-server** (`~/Projects/glupo-dev/picoauth-server`, not pushed yet): Rust, axum + sqlx like
+  idp-rs, one crate. The API is listed at the top of `src/web.rs`: `POST /check`, `/accounts`, `/login`,
+  `/logout`; `GET|PUT|DELETE /files/{path}`, `GET /list?dir=`; JSON, content in base64, errors as
+  `{"error": "<code>"}`. Tables in `migrations/`: `accounts` (username, SHA-256 of `login_hash`),
+  `invites`, `tokens` (SHA-256 only), `files` (account, path, content, random version). Commands:
+  `serve`, `invite`, `invites`, `revoke <username>`. Default address `127.0.0.1:8686` (8585 is taken by
+  dashboard-rs on the Mac; idp-rs uses 8484, schule-server 8787). Tests: `cargo test` with
+  `DATABASE_URL` (a fresh database per test).
+- **Pico Auth** (`cmd/picoauth`, **proposed** details, not discussed with the author):
+  - `glupo.go`: the client; `login_hash = Argon2id(password, "picoauth-login:" + username, 3, 64 MB,
+    4 threads, 32 bytes)`; the token in the keychain (`glupo.dev access`); `remotes` sends every file
+    operation to GitHub or glupo.dev by the link. A vault linked to glupo.dev has `"repo":
+    "glupo.dev/<username>"` in `sync.json` (a GitHub owner cannot contain a dot).
+  - When the server refuses the token (revoked), the device logs in again **by itself** with its user
+    name and master password: no question to the user.
+  - `glupolink.go`: Settings › `2 Sync with glupo.dev` (`3 Delete this vault` moved from 2): form with
+    user name and invite code, the check, the account, the upload. A wrong invite or a taken name brings
+    the form back with the message. A link that stopped halfway is finished by doing it again: the
+    check fails (invite used), the login with the master password finds the account, the vault is
+    uploaded.
+  - Reset this device also revokes the device's token on glupo.dev.
+  - Messages name the service of the link ("No connection to glupo.dev…").
+  - `PICOAUTH_SERVER` changes the address, only for tests against a local server.
+  - Tests: `glupo_test.go` (a fake server), `glupo_real_test.go` (against a real server, only with
+    `PICOAUTH_SERVER`, `PICOAUTH_TEST_INVITE`, `PICOAUTH_TEST_USER`): passed on 2026-11-14.
+- **Temporary:** `glupoServer` in `glupo.go` is `http://127.0.0.1:8686` (the server on the author's Mac)
+  while block 1 is tried locally, at the author's request. **Put back `https://api.picoauth.glupo.dev`
+  before the server goes on the VPS.**

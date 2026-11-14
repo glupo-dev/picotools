@@ -41,14 +41,14 @@ func (m *model) join(v *syncView, repo string) {
 	pub := priv.PublicKey().Bytes()
 	now, every := m.now().UTC(), m.checkEvery
 	go func() {
-		_, _, err := m.gh.getFile(ctx, repo, vaultFile)
+		_, _, err := m.rs.getFile(ctx, repo, vaultFile)
 		if errors.Is(err, errNotFound) {
 			err = errors.New(repo + " holds no vault: link first the device that has it (Settings › Sync with GitHub)")
 		}
 		var reqSHA string
 		if err == nil {
 			body, _ := json.Marshal(request{PublicKey: pub, Created: now})
-			reqSHA, err = m.gh.putFile(ctx, repo, requestPath(id), body, "", "Pico Auth: a new device asks for access")
+			reqSHA, err = m.rs.putFile(ctx, repo, requestPath(id), body, "", "Pico Auth: a new device asks for access")
 		}
 		if err != nil {
 			later(func() { v.err = capitalize(err.Error()) })
@@ -58,7 +58,7 @@ func (m *model) join(v *syncView, repo string) {
 			v.pair, v.msg = pairCode(pub), "Waiting for the approval…"
 			// Leaving now withdraws the request.
 			v.onEsc = func() {
-				go m.gh.deleteFile(ctx, repo, requestPath(id), reqSHA, "Pico Auth: request withdrawn")
+				go m.rs.deleteFile(ctx, repo, requestPath(id), reqSHA, "Pico Auth: request withdrawn")
 			}
 		})
 
@@ -71,7 +71,7 @@ func (m *model) join(v *syncView, repo string) {
 				return
 			case <-time.After(every):
 			}
-			data, sha, err := m.gh.getFile(ctx, repo, answerPath(id))
+			data, sha, err := m.rs.getFile(ctx, repo, answerPath(id))
 			if err == nil {
 				ans, ansSHA = data, sha
 				break
@@ -79,7 +79,7 @@ func (m *model) join(v *syncView, repo string) {
 			if !errors.Is(err, errNotFound) {
 				continue // the network may come back
 			}
-			if _, _, err := m.gh.getFile(ctx, repo, requestPath(id)); errors.Is(err, errNotFound) {
+			if _, _, err := m.rs.getFile(ctx, repo, requestPath(id)); errors.Is(err, errNotFound) {
 				later(func() {
 					v.onEsc = nil
 					m.startPage = 0
@@ -93,10 +93,10 @@ func (m *model) join(v *syncView, repo string) {
 		var raw []byte
 		var sha string
 		if err == nil {
-			raw, sha, err = m.gh.getFile(ctx, repo, vaultFile) // the newest version
+			raw, sha, err = m.rs.getFile(ctx, repo, vaultFile) // the newest version
 		}
-		m.gh.deleteFile(ctx, repo, answerPath(id), ansSHA, "Pico Auth: access given")
-		m.gh.deleteFile(ctx, repo, requestPath(id), reqSHA, "Pico Auth: access given")
+		m.rs.deleteFile(ctx, repo, answerPath(id), ansSHA, "Pico Auth: access given")
+		m.rs.deleteFile(ctx, repo, requestPath(id), reqSHA, "Pico Auth: access given")
 		later(func() {
 			v.onEsc = nil
 			if err != nil {
@@ -150,7 +150,7 @@ type pendingRequest struct {
 // fetchRequests reads the requests of new computers, the oldest first, and deletes the old ones.
 // It runs outside the user interface.
 func (m *model) fetchRequests(ctx context.Context, repo string, now time.Time) []*pendingRequest {
-	es, err := m.gh.listDir(ctx, repo, requestsDir)
+	es, err := m.rs.listDir(ctx, repo, requestsDir)
 	if err != nil {
 		return nil
 	}
@@ -161,13 +161,13 @@ func (m *model) fetchRequests(ctx context.Context, repo string, now time.Time) [
 		if e.Type != "file" || !ok {
 			continue
 		}
-		raw, sha, err := m.gh.getFile(ctx, repo, e.Path)
+		raw, sha, err := m.rs.getFile(ctx, repo, e.Path)
 		var r request
 		if err != nil || json.Unmarshal(raw, &r) != nil {
 			continue
 		}
 		if now.Sub(r.Created) > requestLife {
-			m.gh.deleteFile(ctx, repo, e.Path, sha, "Pico Auth: request expired")
+			m.rs.deleteFile(ctx, repo, e.Path, sha, "Pico Auth: request expired")
 			continue
 		}
 		p := &pendingRequest{id: name, sha: sha, pub: r.PublicKey, code: pairCode(r.PublicKey)}
@@ -209,7 +209,7 @@ func (m *model) approveRune(r rune) {
 			m.say("Approving the new device…")
 			repo, ctx := m.link.Repo, m.background
 			go func() {
-				_, err := m.gh.putFile(ctx, repo, answerPath(req.id), body, "", "Pico Auth: access given to a new device")
+				_, err := m.rs.putFile(ctx, repo, answerPath(req.id), body, "", "Pico Auth: access given to a new device")
 				m.ui(func() {
 					if err != nil {
 						m.warn("Could not approve: " + err.Error())
@@ -225,7 +225,7 @@ func (m *model) approveRune(r rune) {
 		m.screen = screenList
 		m.say("Request refused")
 		repo, ctx := m.link.Repo, m.background
-		go m.gh.deleteFile(ctx, repo, requestPath(req.id), req.sha, "Pico Auth: request refused")
+		go m.rs.deleteFile(ctx, repo, requestPath(req.id), req.sha, "Pico Auth: request refused")
 	}
 }
 

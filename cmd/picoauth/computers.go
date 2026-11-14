@@ -62,7 +62,7 @@ func (m *model) register() {
 	body, _ := json.Marshal(thisComputer(m.now()))
 	repo, ctx, l := m.link.Repo, m.background, m.link
 	go func() {
-		_, err := m.gh.putFile(ctx, repo, computerPath(id), body, "", "Pico Auth: a device is linked")
+		_, err := m.rs.putFile(ctx, repo, computerPath(id), body, "", "Pico Auth: a device is linked")
 		m.ui(func() {
 			m.registering = false
 			if err == nil && m.link == l {
@@ -83,7 +83,7 @@ func (m *model) markUsed() {
 	m.markingUsed = true
 	repo, path, ctx, now := m.link.Repo, computerPath(m.link.Computer), m.background, m.now().UTC()
 	go func() {
-		raw, sha, err := m.gh.getFile(ctx, repo, path)
+		raw, sha, err := m.rs.getFile(ctx, repo, path)
 		var c computer
 		if err == nil {
 			err = json.Unmarshal(raw, &c)
@@ -91,7 +91,7 @@ func (m *model) markUsed() {
 		if err == nil {
 			c.LastUsed = now
 			body, _ := json.Marshal(c)
-			_, err = m.gh.putFile(ctx, repo, path, body, sha, "Pico Auth: opened on a device")
+			_, err = m.rs.putFile(ctx, repo, path, body, sha, "Pico Auth: opened on a device")
 		}
 		m.ui(func() {
 			m.markingUsed = false
@@ -105,7 +105,7 @@ func (m *model) markUsed() {
 // fetchComputers reads the files of the linked computers, the oldest first.
 // It runs outside the user interface.
 func (m *model) fetchComputers(ctx context.Context, repo string) ([]computer, error) {
-	es, err := m.gh.listDir(ctx, repo, computersDir)
+	es, err := m.rs.listDir(ctx, repo, computersDir)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +115,7 @@ func (m *model) fetchComputers(ctx context.Context, repo string) ([]computer, er
 		if e.Type != "file" || !ok {
 			continue
 		}
-		raw, _, err := m.gh.getFile(ctx, repo, e.Path)
+		raw, _, err := m.rs.getFile(ctx, repo, e.Path)
 		if err != nil {
 			return nil, err
 		}
@@ -146,7 +146,7 @@ func (m *model) openComputers() {
 		m.ui(func() {
 			v.loading, v.list = false, cs
 			if err != nil {
-				v.err = "Could not read the list from GitHub: " + err.Error()
+				v.err = "Could not read the list from " + m.where() + ": " + err.Error()
 			}
 		})
 	}()
@@ -157,7 +157,7 @@ func (m *model) renderComputers() []line {
 	lines := []line{{gui.Strong("Settings › Linked devices", nil)}, nil}
 	switch {
 	case v.loading:
-		lines = append(lines, line{gui.Colored("Reading the list from GitHub…", gui.Muted)})
+		lines = append(lines, line{gui.Colored("Reading the list from "+m.where()+"…", gui.Muted)})
 	case v.err != "":
 		lines = append(lines, line{gui.Strong("✘ "+v.err, gui.Red)})
 	default:
