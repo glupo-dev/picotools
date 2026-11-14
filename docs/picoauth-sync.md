@@ -8,7 +8,8 @@ Not everything here was agreed: the status of each point is the label it carries
 **No code is written yet.** On GitHub everything is ready (2026-11-14): the GitHub App is registered
 (section 2.1), the author's repository is created and the app is installed on it (section 2.2).
 Today Pico Auth keeps the vault on one computer only
-(`picoauth/vault.picoauth` in the app settings folder) and moves it with Export → backup file.
+(`picoauth/vault.picoauth` in the app settings folder). Export and restore were removed from the code on
+2026-11-14 (section 8).
 
 Each point is marked:
 - **Decided**: agreed with the author.
@@ -23,7 +24,7 @@ Each point is marked:
 - **Decided.** The goal is the same vault on several computers **at the same time**, always aligned
   (not only moving it now and then).
 - **Decided.** Sync is **optional**. Without GitHub, Pico Auth works standalone on one computer, as today;
-  to change computer a standalone user uses a backup file (see 8).
+  without the backup file (removed, section 8) a standalone vault stays on its computer.
 - **Decided.** The vault lives in a **private GitHub repository** of the user (for example `picoauth-vault`).
   The repository holds only the encrypted vault (plus the small files of section 6).
 - **Decided.** Pico Auth **does not use git**. It talks to GitHub directly over HTTPS (the GitHub API).
@@ -191,7 +192,7 @@ Things to know:
 Shown only the first time, when the computer has no vault yet; then Pico Auth opens on the list of accounts.
 The old first screen (`1 New vault / 2 Restore a backup`) was found confusing: "restore" in particular.
 
-- **Decided** (the author proposed this structure): two choices, then two sources.
+- **Decided** (the author proposed this structure): two choices, then the sources on a second page.
 
 ```
 1  New vault
@@ -202,8 +203,11 @@ The old first screen (`1 New vault / 2 Restore a backup`) was found confusing: "
 
 ```
 1  From GitHub
-2  From a backup file
 ```
+
+- **Decided (2026-11-14).** The second page stays even with GitHub **alone** on it (the backup file was
+  removed, section 8): the first menu must stay the same, and a source can be added there later if
+  the backup ever comes back.
 
 - **Open.** The labels are to be improved.
 
@@ -236,6 +240,29 @@ Who has a local vault and wants to use the one already on GitHub has two ways:
 **Decided.** A local vault can be deleted **only if it is not linked to GitHub**,
 confirming by typing `delete` and the **master password of that vault**.
 
+**Decided (2026-11-14): unlink a computer.** For example the last day at a job, with the work PC still
+in front of the user. A linked computer holds the **local copy** of the vault and, in its keychain, the
+**master password**, the **second key** and the **GitHub access**. "Unlink this computer":
+1. asks confirmation by typing `delete` and the master password (as deleting a local vault above);
+2. deletes the local copy of the vault;
+3. deletes master password, second key and GitHub access from the keychain.
+
+The vault on GitHub and the other computers do not change. Afterwards the computer is like new: at the
+next start Pico Auth shows the first-start menu (section 4). So a linked computer can also get rid of
+its vault: by unlinking.
+
+The case of a computer **no longer in the user's hands** (lost, stolen, already given back) is rare
+and, as the author decided, **not handled for now**: there the four things stay on that computer.
+
+**Removed from the open points (2026-11-14): "2 → From GitHub" on a repository with no vault.**
+It looked like a case to design, but it is not a real one. A user who wants sync starts it from
+Pico Auth on the computer that has the vault ("link to GitHub", this section): Pico Auth guides them to
+create the repository and install the app (2.2), then logs in and uploads the vault at once. The
+repository is born inside the link, so the user cannot "forget" to upload the vault. It can only happen
+if the link breaks halfway (for example the connection drops before the upload): a plain error, where
+the computer with the vault says the link did not finish and must be done again; on another computer
+"From GitHub" just says that no vault was found.
+
 ---
 
 ## 6. Flow: add another computer
@@ -262,9 +289,20 @@ which each Pico Auth reads when it opens and from time to time while it is open.
 ### On an already linked computer (any one, not only the Mac)
 6. When Pico Auth opens (or at its next check while open) it finds the request and shows:
    "A new computer asks for access, code 482 913. Approve?"
-7. The user checks that the code is **the same** as on the new computer's screen, and presses `y`.
+7. The user checks that the code is **the same** as on the new computer's screen, presses `y` and
+   types the **master password** (**decided 2026-11-14**).
    The code is there because whoever gets into the GitHub account could write a fake request:
    its code would be different from the one on the user's screen, and the user refuses it.
+   The master password is there because a linked computer opens by itself: without it, whoever sits at
+   it while it is unlocked could approve a request with `y` alone and give the second key away. It is
+   typed only when a computer is added (rarely), and the everyday use (opening, copying codes) stays
+   without password. The author's words: "non siamo alla NASA", but one password per device is no drama.
+
+   **Refusing (decided 2026-11-14)**, with `n`: because the code is different (a fake request) or
+   because the user changed their mind. The linked computer **deletes the request** from the
+   repository, so it does not come back. The new computer, at its next check, finds its request gone,
+   shows "Request refused or expired" and goes back to the first-start menu; if it really was the
+   user's computer, they do "From GitHub" again from the start.
 8. Pico Auth encrypts the second key with the new computer's public key and writes the answer
    in the repository. Only the new computer can read it.
 
@@ -285,6 +323,15 @@ which each Pico Auth reads when it opens and from time to time while it is open.
   (shown for approval). When Pico Auth is closed it reads nothing (explained to the author, no objection).
 - **Decided.** Every change (add, rename, delete an account) is saved locally and **uploaded at once**.
   The other computers see it at their next opening or check.
+- **Decided (2026-11-14).** **Without internet, changes are blocked**: Pico Auth says there is no
+  connection and changes nothing. The codes keep working offline (they come from the local copy).
+  Why (the alternative was "save the change and upload it later"): adding an account happens while
+  turning on two-factor on a website, so online anyway; rename and delete are rare and can wait.
+  Every change is on GitHub as soon as it is made, so the other computers never fall behind and no
+  pending changes pile up to be reconciled after hours or days (where "renamed on one, deleted on the
+  other" would happen more often). No queue of changes to keep on disk. If editing offline is ever
+  really needed, "upload later" can be added without throwing anything away.
+  Consequence: the change to retry after a conflict (below) is kept only in memory during the upload.
 
 **Decided** (explained and accepted). Conflicts, when two computers save at almost the same time:
 1. Pico Auth uploads saying to GitHub "I replace the version I read".
@@ -301,15 +348,30 @@ repeating one operation. This is different from section 5, where two independent
 
 ---
 
-## 8. Backup file
+## 8. Export and backup: removed
 
-- **Decided.** Export → encrypted backup gives a file that opens with the **master password only** (no second key).
-- It is used to move a standalone vault to a new computer (2 → From a backup file), and as the
-  **emergency kit** of a synced vault: if all linked computers are lost, the copy on GitHub cannot be
-  opened (the second key was only on them), the backup file can.
-- **Proposed.** Keep the backup **off GitHub** (for example on a USB stick).
-- Fact: a backup is a snapshot; accounts changed after it are not in it.
-- **Proposed.** The plain `otpauth://` list export stays as today, also for a synced vault (not discussed).
+**Decided (2026-11-14): the whole Export is removed** from Pico Auth: the encrypted backup file, the
+plain `otpauth://` list, "restore a backup" at the first start and "From a backup file" in the new
+first-start menu (section 4). It may be added again if a real need appears.
+
+Why. The author: "o sei uno che usa in locale o sei uno che usa GitHub", and nobody makes exports
+regularly ("i password manager servono proprio a questo"). The uses were listed one by one and judged:
+1. A standalone user moving to a new computer (one-time, so no need to remember it): realistic, but
+   standalone users do not interest the author; they can link GitHub to move.
+2. A computer breaks without sync: the backup helps only if recent, and nobody keeps it recent.
+3. With sync, all linked computers lost together (the backup was the "emergency kit"): a backup made
+   maybe a year earlier gives back only part of the accounts; the author: nobody uses a USB stick any more.
+4. The vault file damaged by a bug: rare, and with sync there is the copy on GitHub and on the other
+   computer.
+5. The `otpauth://` list to leave Pico Auth for another app (the way out that Authy lacks): judged
+   unrealistic by the author.
+6. The list to have the same codes on a phone too: the two copies would not stay aligned.
+
+Consequences (facts, said to the author):
+- With sync, the safety is having **at least two linked computers**. If **all** of them are lost, the
+  vault on GitHub cannot be opened (the second key was only on them): the accounts are lost and must be
+  set up again site by site. Rare case, accepted.
+- A standalone vault cannot be moved to another computer, except by linking it to GitHub.
 
 ---
 
@@ -321,7 +383,7 @@ repeating one operation. This is different from section 5, where two independent
   public app on it (2.2). He registers nothing. Then he links his computers with his own login.
 - GitHub gives Mario's Pico Auth access only to his repository: he does not see the author's, the author
   does not see his. Each has their own master password and second key.
-- Who does not want GitHub uses Pico Auth standalone.
+- Who does not want GitHub uses Pico Auth standalone (on one computer only, section 8).
 - **To do before giving it to others**: the presentation page at `https://picoauth.glupo.dev`, the
   Homepage URL of the app (see 2.1).
 
@@ -353,13 +415,12 @@ All in `cmd/picoauth`:
 - `vault.go`: the vault file. A JSON envelope with the Argon2id parameters and salt, a nonce, and the
   accounts encrypted with AES-256-GCM; the key comes from the master password only. The master password
   is kept in the keychain (`go-keyring`, service `picoauth`). Sync needs the key to come from master
-  password + second key, while the backup file of section 8 keeps a password-only key.
+  password + second key.
 - `model.go` / `render.go`: the screens. The first start is `screenStart` / `renderStart`
-  (today `1 New vault / 2 Restore a backup`, to be replaced by section 4). The account list is
-  `screenList`; Export is `screenExport` (`e`).
+  (today only `1 New vault`, to become the menu of section 4). The account list is `screenList`.
 - `totp.go`: the codes and the `otpauth://` parsing. Not touched by sync.
 - `form.go`: the question forms (copied from Pico API). `main.go`: window, clipboard, the 1-second tick.
-- Keys of the list today: `n` new, `m` rename, `d` delete, `e` export (only when there are accounts),
+- Keys of the list today: `n` new, `m` rename, `d` delete (only when there are accounts),
   `enter`/`1-9` copy a code, `↑/↓` move, `esc`/`q` quit.
 - Tests: `totp_test.go`, `vault_test.go`, `model_test.go`. `./build.sh` builds every app into `dist/`.
 
@@ -367,23 +428,10 @@ All in `cmd/picoauth`:
 
 ## 12. Still open
 
-- What Pico Auth does **without internet** when an account is changed (upload later, or block changes).
-- How to **unlink or remove a computer** (for example when leaving a job). A computer that has the second
-  key keeps it: removing it for real means a new second key and approving the other computers again.
 - The **key and screen** to link an existing local vault to GitHub (section 5).
 - The **labels** of the first-start menu (section 4).
-- 2 → From GitHub on a repository with **no vault yet**: what Pico Auth says (probably: create a New vault,
-  then link it as in section 5).
-- The **key and screen to delete** a local vault (the rule is decided in section 5, not the place).
-- **Refusing a request**: what happens when the user does not press `y` (request deleted? what the new
-  computer shows?).
-- **Approving needs no password**: a linked computer opens by itself, so whoever sits at it unlocked can
-  approve a new computer with `y`. Not discussed: accept it, or ask the master password to approve.
-- A **linked** computer can never delete its local vault (the rule of section 5 allows it only when not
-  linked), so this depends on how a computer is unlinked.
-- **Emergency with sync**: all linked computers lost, vault restored from the backup file. It is now a
-  local vault, but the repository still holds the old vault, so the rule of section 5 blocks linking it.
-  Ways not discussed: link it to a new empty repository, or delete the old vault on GitHub first.
+- The **key and screen to delete** a local vault and to **unlink** a computer (the rules are decided in
+  section 5, not the place).
 
 Technical points never discussed with the author (to decide when building, do not present as decided):
 - How the master password and the second key are combined into the vault key (for example Argon2id on
@@ -397,5 +445,3 @@ Technical points never discussed with the author (to decide when building, do no
   would keep the old password in their keychain and must ask the new one.
 - Old or unanswered requests: when they are deleted. Two linked computers approving the same request
   at the same time. What the new computer does if no linked computer is open (wait, timeout).
-- Retrying a change after a conflict needs the change to be kept until it is uploaded: tied to the
-  offline point above.

@@ -36,9 +36,6 @@ func TestVault(t *testing.T) {
 	if err != nil || len(w.Accounts) != 1 || *w.Accounts[0] != *v.Accounts[0] {
 		t.Fatalf("open: %v", err)
 	}
-	if !w.checkPassword("correct horse") || w.checkPassword("correct") {
-		t.Error("checkPassword")
-	}
 
 	// A save after opening keeps the same password.
 	w.Accounts[0].Name = "GitLab"

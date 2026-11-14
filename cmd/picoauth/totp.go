@@ -170,23 +170,3 @@ func parseURI(s string) (*Account, error) {
 	}
 	return a, nil
 }
-
-// uri is the account as an otpauth://totp/ address, the format other authenticator apps import.
-func (a *Account) uri() string {
-	label := a.Name
-	if a.User != "" {
-		if label != "" {
-			label += ":"
-		}
-		label += a.User
-	}
-	q := url.Values{}
-	q.Set("secret", a.Secret)
-	if a.Name != "" {
-		q.Set("issuer", a.Name)
-	}
-	q.Set("algorithm", a.Algorithm)
-	q.Set("digits", strconv.Itoa(a.Digits))
-	q.Set("period", strconv.Itoa(a.Period))
-	return "otpauth://totp/" + url.PathEscape(label) + "?" + q.Encode()
-}

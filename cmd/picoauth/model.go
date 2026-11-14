@@ -4,7 +4,6 @@ import (
 	"errors"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -15,12 +14,11 @@ import (
 type screen int
 
 const (
-	screenStart   screen = iota // first start: new vault or restore a backup
+	screenStart   screen = iota // first start: new vault
 	screenList                  // the accounts with their codes
 	screenForm                  // questions, one after the other
 	screenConfirm               // a yes/no question
 	screenPreview               // a new account with its code, before saving it
-	screenExport                // which kind of export
 	screenFatal                 // something went wrong at start: only esc
 )
 
@@ -34,8 +32,7 @@ type model struct {
 	path   string // the vault file
 	screen screen
 
-	cursor       int // selected account
-	exportCursor int // selected kind of export
+	cursor int // selected account
 
 	form    *form
 	confirm []line // the yes/no question
@@ -55,11 +52,9 @@ type model struct {
 	clipboard func() string
 	quit      func()
 	now       func() time.Time
-	downloads string // where exports are proposed
 }
 
 func newModel(path string) *model {
-	home, _ := os.UserHomeDir()
 	return &model{
 		path:      path,
 		cols:      gui.DefaultCols,
@@ -67,7 +62,6 @@ func newModel(path string) *model {
 		clipboard: func() string { return "" },
 		quit:      func() {},
 		now:       time.Now,
-		downloads: filepath.Join(home, "Downloads"),
 	}
 }
 
@@ -93,7 +87,7 @@ func (m *model) start() {
 }
 
 // askPassword asks the master password when the keychain does not have it (a new computer,
-// a restored file, a password changed elsewhere) and keeps it there once it opens the vault.
+// a password changed elsewhere) and keeps it there once it opens the vault.
 func (m *model) askPassword() {
 	m.screen = screenFatal // esc quits
 	m.ask("Open Pico Auth", []question{{label: "Master password", secret: true}}, func(a []string) string {
@@ -143,15 +137,6 @@ func (m *model) Key(k string) {
 	case screenConfirm, screenPreview:
 		m.screen = m.after // any key other than y is no
 
-	case screenExport:
-		switch k {
-		case gui.KeyUp, gui.KeyDown:
-			m.exportCursor = move(m.exportCursor, k, 2)
-		case gui.KeyEnter:
-			m.exportForm(m.exportCursor)
-		case gui.KeyEsc:
-			m.screen = screenList
-		}
 	}
 }
 
@@ -161,11 +146,8 @@ func (m *model) Rune(r rune) {
 	}
 	switch m.screen {
 	case screenStart:
-		switch r {
-		case '1':
+		if r == '1' {
 			m.newVaultForm()
-		case '2':
-			m.restoreForm()
 		}
 
 	case screenList:
@@ -177,8 +159,6 @@ func (m *model) Rune(r rune) {
 			m.editForm()
 		case r == 'd' && has:
 			m.deleteAccount()
-		case r == 'e' && has:
-			m.exportCursor, m.screen = 0, screenExport
 		case r == 'q':
 			m.quit()
 		case r >= '1' && r <= '9':
@@ -194,10 +174,6 @@ func (m *model) Rune(r rune) {
 			m.yes()
 		}
 
-	case screenExport:
-		if r == '1' || r == '2' {
-			m.exportForm(int(r - '1'))
-		}
 	}
 }
 
@@ -301,33 +277,6 @@ func (m *model) newVaultForm() {
 	})
 }
 
-func (m *model) restoreForm() {
-	m.ask("Restore a backup", []question{
-		{label: "Backup file", value: filepath.Join(m.downloads, "picoauth-backup.picoauth")},
-		{label: "Master password of the backup", secret: true},
-	}, func(a []string) string {
-		v, err := openVault(expandHome(a[0]), a[1])
-		if errors.Is(err, errWrongPassword) {
-			return "Wrong password"
-		}
-		if errors.Is(err, fs.ErrNotExist) {
-			return "There is no file " + a[0]
-		}
-		if err != nil {
-			return capitalize(err.Error())
-		}
-		if err := v.moveTo(m.path); err != nil {
-			return "Could not save the vault: " + err.Error()
-		}
-		m.vault, m.screen = v, screenList
-		m.say(count(len(v.Accounts), "account") + " restored")
-		if err := savePassword(a[1]); err != nil {
-			m.warn(capitalize(err.Error()))
-		}
-		return ""
-	})
-}
-
 // ---- Accounts ----
 
 func (m *model) copyCode(i int) {
@@ -413,66 +362,7 @@ func (m *model) deleteAccount() {
 	})
 }
 
-// ---- Export ----
-
-func (m *model) exportForm(kind int) {
-	day := m.now().Format("2006-01-02")
-	file := "picoauth-backup-" + day + ".picoauth"
-	title := "Export › encrypted backup"
-	if kind == 1 {
-		file = "picoauth-otpauth-" + day + ".txt"
-		title = "Export › otpauth:// list in plain text"
-	}
-	m.ask(title, []question{
-		{label: "Master password", secret: true, check: func(v string, _ []string) string {
-			if !m.vault.checkPassword(v) {
-				return "Wrong password"
-			}
-			return ""
-		}},
-		{label: "Save as", value: filepath.Join(m.downloads, file)},
-	}, func(a []string) string {
-		path := expandHome(a[1])
-		if _, err := os.Stat(path); err == nil {
-			return "There is already a file there: choose another name"
-		}
-		var err error
-		if kind == 0 {
-			err = m.vault.writeTo(path)
-		} else {
-			err = os.WriteFile(path, []byte(m.uriList()), 0o600)
-		}
-		if err != nil {
-			return "Could not write the file: " + err.Error()
-		}
-		m.screen = screenList
-		if kind == 0 {
-			m.say("Backup saved in " + path)
-		} else {
-			m.say("List saved in " + path + ": delete it once imported")
-		}
-		return ""
-	})
-}
-
-func (m *model) uriList() string {
-	var b strings.Builder
-	for _, a := range m.vault.Accounts {
-		b.WriteString(a.uri() + "\n")
-	}
-	return b.String()
-}
-
 // ---- Helpers ----
-
-func expandHome(p string) string {
-	if p == "~" || strings.HasPrefix(p, "~/") || strings.HasPrefix(p, `~\`) {
-		if home, err := os.UserHomeDir(); err == nil {
-			return filepath.Join(home, p[1:])
-		}
-	}
-	return p
-}
 
 func label(a *Account) string {
 	if a.User == "" {

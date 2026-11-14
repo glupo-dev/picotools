@@ -53,12 +53,6 @@ func TestParseInput(t *testing.T) {
 	if a.Name != "ACME Co" || a.User != "john.doe@email.com" || a.Algorithm != "SHA256" || a.Digits != 8 || a.Period != 60 {
 		t.Fatalf("uri: %+v", a)
 	}
-	// Back and forth through uri() gives the same account.
-	b, err := parseURI(a.uri())
-	if err != nil || *b != *a {
-		t.Fatalf("round trip: %+v %v", b, err)
-	}
-
 	a, err = parseInput("otpauth://totp/someone?secret=JBSWY3DPEHPK3PXP")
 	if err != nil || a.Name != "" || a.User != "someone" {
 		t.Fatalf("label only: %+v %v", a, err)

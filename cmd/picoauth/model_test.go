@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -20,8 +19,6 @@ type testModel struct {
 
 func newTestModel(t *testing.T, dir string) *testModel {
 	m := newModel(filepath.Join(dir, "picoauth", "vault.picoauth"))
-	m.downloads = filepath.Join(dir, "Downloads")
-	os.MkdirAll(m.downloads, 0o700)
 	m.rows, m.cols = 40, 120
 	tm := &testModel{model: m, at: time.Unix(1700000000, 0)}
 	m.copy = func(s string) { tm.clip = s }
@@ -55,6 +52,9 @@ func TestFlow(t *testing.T) {
 	tm := newTestModel(t, dir)
 	if tm.screen != screenStart {
 		t.Fatalf("screen %v", tm.screen)
+	}
+	if strings.Contains(tm.text(), "2  ") {
+		t.Fatal("the first start offers more than a new vault:\n" + tm.text())
 	}
 
 	// New vault: the password must be long enough and typed twice the same.
@@ -126,58 +126,15 @@ func TestFlow(t *testing.T) {
 		t.Fatal("cleared what the user copied")
 	}
 
-	// Export: wrong password refused, then both files.
-	tm.Rune('e')
-	tm.Rune('2')
-	tm.typ("nope")
-	if !strings.Contains(tm.text(), "Wrong password") {
-		t.Fatal(tm.text())
-	}
-	for range 4 {
-		tm.Key(gui.KeyBackspace)
-	}
-	tm.typ("master-pw")
-	tm.Key(gui.KeyEnter)
-	list, err := os.ReadFile(filepath.Join(tm.downloads, "picoauth-otpauth-2023-11-14.txt"))
-	if err != nil || !strings.HasPrefix(string(list), "otpauth://totp/GitHub:me?") {
-		t.Fatalf("%q %v", list, err)
-	}
-	tm.Rune('e')
-	tm.Rune('1')
-	tm.typ("master-pw")
-	tm.Key(gui.KeyEnter)
-	backup := filepath.Join(tm.downloads, "picoauth-backup-2023-11-14.picoauth")
-	if _, err := os.Stat(backup); err != nil {
-		t.Fatal(err)
-	}
-
 	// Next start: the keychain opens it without asking.
 	tm2 := newTestModel(t, dir)
 	if tm2.screen != screenList || len(tm2.vault.Accounts) != 1 {
 		t.Fatalf("screen %v", tm2.screen)
 	}
 
-	// New computer: empty keychain and the backup restored.
-	keyring.MockInit()
-	other := t.TempDir()
-	tm3 := newTestModel(t, other)
-	tm3.Rune('2')
-	tm3.typ(backup)
-	tm3.typ("bad password")
-	if !strings.Contains(tm3.text(), "Wrong password") {
-		t.Fatal(tm3.text())
-	}
-	for range len("bad password") {
-		tm3.Key(gui.KeyBackspace)
-	}
-	tm3.typ("master-pw")
-	if tm3.screen != screenList || len(tm3.vault.Accounts) != 1 {
-		t.Fatalf("restore: %v\n%s", tm3.screen, tm3.text())
-	}
-
 	// Keychain lost: the password is asked once, then remembered.
 	keyring.MockInit()
-	tm4 := newTestModel(t, other)
+	tm4 := newTestModel(t, dir)
 	if tm4.screen != screenForm {
 		t.Fatalf("screen %v", tm4.screen)
 	}

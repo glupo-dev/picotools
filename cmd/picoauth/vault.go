@@ -4,7 +4,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -93,7 +92,6 @@ func (k kdf) key(password string) []byte {
 }
 
 // openVault reads and decrypts the file at path; a wrong password gives errWrongPassword.
-// The vault keeps path as its file, so a backup opened from elsewhere can be saved in place with moveTo.
 func openVault(path, password string) (*Vault, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -151,14 +149,10 @@ func (v *Vault) encrypted() ([]byte, error) {
 	return json.MarshalIndent(env, "", "  ")
 }
 
-// save writes the vault to its file, readable only by the user.
+// save writes the vault to its file, readable only by the user, going through a temporary
+// file so a failure never leaves half a file.
 func (v *Vault) save() error {
-	return v.writeTo(v.path)
-}
-
-// writeTo writes the encrypted vault to path, going through a temporary file so a
-// failure never leaves half a file.
-func (v *Vault) writeTo(path string) error {
+	path := v.path
 	data, err := v.encrypted()
 	if err != nil {
 		return err
@@ -171,17 +165,6 @@ func (v *Vault) writeTo(path string) error {
 		return err
 	}
 	return os.Rename(tmp, path)
-}
-
-// moveTo makes path the vault's file and saves it there.
-func (v *Vault) moveTo(path string) error {
-	v.path = path
-	return v.save()
-}
-
-// checkPassword says whether password is the master password, taking the same time either way.
-func (v *Vault) checkPassword(password string) bool {
-	return subtle.ConstantTimeCompare([]byte(password), []byte(v.password)) == 1
 }
 
 // ---- The master password in the system keychain ----

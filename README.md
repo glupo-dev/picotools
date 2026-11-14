@@ -43,8 +43,6 @@ here as well as scanning the QR code with the phone: both then make the same cod
 Enter copies a code, and it leaves the clipboard after 30 seconds.
 The accounts are in a file encrypted with a master password (Argon2id + AES-256-GCM);
 the keychain remembers the password, so it is typed only the first time and on a new computer.
-Export, always behind the master password: an encrypted backup to move to another computer,
-or an `otpauth://` list in plain text to import into another authenticator app.
 
 ### Pico Edit
 A simple text editor driven by the keyboard, in the spirit of vi but without its modes:

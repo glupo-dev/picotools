@@ -28,8 +28,6 @@ func (m *model) Render(cols, rows int) []line {
 		lines = append(lines, nil, line{gui.Colored("y yes · any other key no", gui.Muted)})
 	case screenPreview:
 		lines = append(lines, m.renderPreview()...)
-	case screenExport:
-		lines = append(lines, m.renderExport()...)
 	case screenFatal:
 		if m.fatal != "" {
 			lines = append(lines, line{gui.Strong("✘ "+m.fatal, gui.Red)}, nil)
@@ -53,10 +51,9 @@ func (m *model) renderStart() []line {
 		{gui.Strong("Welcome", nil)},
 		{gui.Colored("The accounts are kept in a file encrypted with a master password of your choice.", gui.Muted)},
 		{gui.Colored("This computer's keychain remembers it, so you type it only here and on a new computer.", gui.Muted)},
-		{gui.Colored("If you lose it, the backups cannot be opened by anyone: write it down somewhere safe.", gui.Muted)},
+		{gui.Colored("If you lose it, the vault cannot be opened by anyone: write it down somewhere safe.", gui.Muted)},
 		nil,
 		{gui.Plain("  "), gui.Strong("1", gui.Accent), gui.Plain("  New vault")},
-		{gui.Plain("  "), gui.Strong("2", gui.Accent), gui.Plain("  Restore a backup"), gui.Colored("   made with Pico Auth on another computer", gui.Muted)},
 	}, m.footer("number choose · esc quit")...)
 }
 
@@ -117,7 +114,7 @@ func (m *model) renderList() []line {
 	lines = append(lines, nil, line{gui.Plain("  "), gui.Strong("n", gui.Accent), gui.Plain("  new account")})
 	hint := "n new · esc quit"
 	if len(as) > 0 {
-		hint = "↑/↓ move · enter copy the code · number quick copy · n new · m edit · d delete · e export · " + gui.FullScreenKey + " full screen · esc quit"
+		hint = "↑/↓ move · enter copy the code · number quick copy · n new · m edit · d delete · " + gui.FullScreenKey + " full screen · esc quit"
 	}
 	return append(lines, m.footer(hint)...)
 }
@@ -139,23 +136,4 @@ func (m *model) renderPreview() []line {
 		nil,
 		line{gui.Colored("y save · any other key cancel", gui.Muted)},
 	)
-}
-
-func (m *model) renderExport() []line {
-	labels := []string{"Encrypted backup", "otpauth:// list"}
-	details := []string{
-		"the vault file, opened with the master password: to move Pico Auth to another computer",
-		"in plain text, readable by anyone: to import the accounts in another authenticator app",
-	}
-	lines := []line{{gui.Strong("Export", nil)}, nil}
-	for i := range labels {
-		l := fmt.Sprintf("%-16s", labels[i])
-		d := gui.Truncate(details[i], m.cols-26)
-		if i == m.exportCursor {
-			lines = append(lines, line{gui.Strong(fmt.Sprintf("› %d  %s", i+1, l), gui.Accent), gui.Colored("   "+d, gui.Muted)})
-		} else {
-			lines = append(lines, line{gui.Plain("  "), gui.Strong(fmt.Sprint(i+1), gui.Accent), gui.Plain("  " + l), gui.Colored("   "+d, gui.Muted)})
-		}
-	}
-	return append(lines, m.footer("↑/↓ move · enter choose · number quick pick · esc back")...)
 }
