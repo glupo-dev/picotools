@@ -682,3 +682,88 @@ func TestLoginAgain(t *testing.T) {
 	}
 	inSync(t, f, mac)
 }
+
+func TestDeleteVault(t *testing.T) {
+	keyring.MockInit()
+	tm := newTestModel(t, t.TempDir())
+	tm.Rune('1')
+	tm.typ("master-pw")
+	tm.typ("master-pw")
+	tm.Rune('s')
+	if !strings.Contains(tm.text(), "2  Delete this vault") {
+		t.Fatal(tm.text())
+	}
+	tm.Rune('2')
+	tm.typ("yes")
+	if !strings.Contains(tm.text(), "Type delete") {
+		t.Fatal(tm.text())
+	}
+	for range 3 {
+		tm.Key(gui.KeyBackspace)
+	}
+	tm.typ("delete")
+	tm.typ("wrong")
+	if !strings.Contains(tm.text(), "Wrong password") {
+		t.Fatal(tm.text())
+	}
+	for range 5 {
+		tm.Key(gui.KeyBackspace)
+	}
+	tm.typ("master-pw")
+	if tm.screen != screenStart || !strings.Contains(tm.text(), "Vault deleted") {
+		t.Fatal(tm.text())
+	}
+	if _, err := os.Stat(tm.path); err == nil {
+		t.Fatal("the file is still there")
+	}
+	if pw, _ := savedPassword(); pw != "" {
+		t.Fatal("the password is still in the keychain")
+	}
+	// esc cancels it.
+	tm.Rune('1')
+	tm.typ("master-pw")
+	tm.typ("master-pw")
+	tm.Rune('s')
+	tm.Rune('2')
+	tm.Key(gui.KeyEsc)
+	if tm.screen != screenSettings || tm.vault == nil {
+		t.Fatal(tm.text())
+	}
+}
+
+func TestUnlink(t *testing.T) {
+	keyring.MockInit()
+	f := newFakeGitHub(t, "genlupo/picoauth-vault")
+	mac := linkedMac(t, f)
+	up := f.file(vaultKey)
+	mac.Rune('s')
+	if !strings.Contains(mac.text(), "1  Unlink this computer") || strings.Contains(mac.text(), "Delete this vault") {
+		t.Fatal(mac.text())
+	}
+	mac.Rune('1')
+	mac.typ("delete")
+	mac.typ("master-pw")
+	if mac.screen != screenStart || !strings.Contains(mac.text(), "unlinked") {
+		t.Fatal(mac.text())
+	}
+	for _, p := range []string{mac.path, linkPath(mac.path)} {
+		if _, err := os.Stat(p); err == nil {
+			t.Fatal(p + " is still there")
+		}
+	}
+	if s, _ := savedSecond(); s != nil {
+		t.Fatal("the second key is still in the keychain")
+	}
+	if tok, _ := savedToken(); tok != nil {
+		t.Fatal("the GitHub access is still in the keychain")
+	}
+	if string(f.file(vaultKey)) != string(up) {
+		t.Fatal("the vault on GitHub changed")
+	}
+	// No more checks of the repository.
+	mac.lastCheck = time.Time{}
+	mac.tick()
+	if mac.checking {
+		t.Fatal("still checking")
+	}
+}

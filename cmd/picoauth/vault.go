@@ -275,3 +275,6 @@ func newSecond() ([]byte, error) {
 	_, err := rand.Read(k)
 	return k, err
 }
+
+func deletePassword() { keyring.Delete(keyringService, keyringUser) }
+func deleteSecond()   { keyring.Delete(keyringService, keyringSecond) }

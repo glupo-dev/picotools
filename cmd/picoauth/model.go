@@ -218,7 +218,7 @@ func (m *model) Rune(r rune) {
 			m.editForm()
 		case r == 'd' && has:
 			m.deleteAccount()
-		case r == 's':
+		case r == 's' && !m.saving:
 			m.openSettings()
 		case r == 'q':
 			m.quit()

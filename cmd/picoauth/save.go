@@ -88,6 +88,9 @@ func (m *model) upload(c change, accs []*Account, done func(), attempt int) {
 		m.ui(func() {
 			m.saving = false
 			m.status = nil
+			if m.vault == nil || m.link == nil {
+				return // the vault was removed from this computer meanwhile
+			}
 			switch {
 			case errors.Is(err, errConflict) && raw != nil:
 				// Another computer saved meanwhile: take its vault and do the change again on it.

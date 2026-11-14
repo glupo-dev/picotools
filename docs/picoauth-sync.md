@@ -6,7 +6,8 @@ reasons behind each choice, so that work can continue from here without the orig
 Not everything here was agreed: the status of each point is the label it carries.
 
 **Block 1 is written and tried (2026-11-14): link the first computer** (section 5). **Block 2 is written,
-to try: add another computer** (section 6). **Block 3 is written, to try: keep them aligned** (section 7). Section 13 lists the blocks.
+to try: add another computer** (section 6). **Block 3 is written, to try: keep them aligned** (section 7). **Block 4 is written: delete and unlink**
+(section 5). Section 13 lists the blocks.
 On GitHub everything is ready (2026-11-14): the GitHub App is registered
 (section 2.1), the author's repository is created and the app is installed on it (section 2.2).
 Today Pico Auth keeps the vault on one computer only
@@ -231,9 +232,22 @@ administration operations, among them the link to GitHub. The name: "Vault" was 
 the author, because 99% of people do not know what a vault is; "Settings" is the name people look for
 when they want to change something of the app.
 
-**Decided (2026-11-14): content of Settings, for now.** Only one item, the GitHub sync (its label is
-still to define). `esc` goes back to the account list, which is the home of Pico Auth. Where delete a
-local vault and unlink a computer go is still open (**proposed**: in Settings too, section 12).
+**Decided (2026-11-14): content of Settings.** `esc` goes back to the account list, which is the home of
+Pico Auth. Delete and unlink go in Settings too (decided 2026-11-14, with the labels below); one of
+the two is shown, depending on the link:
+
+```
+Settings                                Settings
+
+  1  Sync with GitHub                   Synced with GitHub: genlupo/picoauth-vault
+  2  Delete this vault
+                                          1  Unlink this computer
+```
+
+Both ask to type `delete` and the master password (the rules above). Written in block 4: both remove
+from this computer the vault file, `sync.json`, and from the keychain the master password, the second
+key and the GitHub access; Pico Auth then shows the first-start menu. The vault on GitHub is not
+touched.
 2. Browser login (2.3).
 3. Pico Auth finds the repository and checks that it holds **no vault** (a README or other files do not count).
 4. It creates the second key and keeps it in the keychain.
@@ -452,9 +466,6 @@ Added by block 1 (section 13):
 ## 12. Still open
 
 - The **labels** of the first-start menu (section 4).
-- The **label** of the GitHub sync item in Settings (section 5).
-- Where **delete** a local vault and **unlink** a computer go (proposed: in Settings too; the rules are
-  decided in section 5, not the place).
 
 Technical points never discussed with the author (to decide when building, do not present as decided):
 - **Proposed and written in block 3** (to confirm with the author):
@@ -497,7 +508,7 @@ Technical points never discussed with the author (to decide when building, do no
 
 **Decided (2026-11-14).** The sync is written in blocks; each block ends with something the author can
 try in the app:
-1. **Link the first computer** (section 5): `s` → Settings → `1 Sync with GitHub` (label provisional),
+1. **Link the first computer** (section 5): `s` → Settings → `1 Sync with GitHub`,
    browser login, the vault uploaded encrypted. **Written and tried by the author on 2026-11-14**
    with the real GitHub: the vault is in `genlupo/picoauth-vault`. If the app can reach
    more than one repository it asks which one (the proposal of 2.3).
@@ -510,4 +521,4 @@ try in the app:
    blocked, conflicts. **Written 2026-11-14, to try.** On the Mac alone the author can try the upload
    (a commit "Pico Auth: vault changed" at every change) and the block without connection; changes
    arriving from another computer need the PC.
-4. **Delete and unlink** (section 5).
+4. **Delete and unlink** (section 5). **Written 2026-11-14, to try.**

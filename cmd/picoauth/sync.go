@@ -72,8 +72,13 @@ func (v *syncView) busy() bool { return v.err == "" && v.done == "" && v.repos =
 func (m *model) openSettings() { m.screen = screenSettings }
 
 func (m *model) settingsRune(r rune) {
-	if r == '1' && m.link == nil {
+	switch {
+	case m.link == nil && r == '1':
 		m.startLink()
+	case m.link == nil && r == '2':
+		m.deleteVaultForm()
+	case m.link != nil && r == '1':
+		m.unlinkForm()
 	}
 }
 
@@ -267,12 +272,18 @@ func (m *model) renderSettings() []line {
 	lines := []line{{gui.Strong("Settings", nil)}, nil}
 	if m.link != nil {
 		lines = append(lines,
-			line{gui.Plain("Synced with GitHub: "), gui.Strong(m.link.Repo, gui.ValueFg)})
-		return append(lines, m.footer("esc back")...)
+			line{gui.Plain("Synced with GitHub: "), gui.Strong(m.link.Repo, gui.ValueFg)},
+			nil,
+			line{gui.Plain("  "), gui.Strong("1", gui.Accent), gui.Plain("  Unlink this computer")},
+			line{gui.Colored("     Remove the vault from this computer only: it stays on GitHub and on your other computers.", gui.Muted)},
+		)
+		return append(lines, m.footer("number choose · esc back")...)
 	}
 	lines = append(lines,
 		line{gui.Plain("  "), gui.Strong("1", gui.Accent), gui.Plain("  Sync with GitHub")},
 		line{gui.Colored("     Put this vault in a private GitHub repository of yours, to have it on your other computers.", gui.Muted)},
+		line{gui.Plain("  "), gui.Strong("2", gui.Accent), gui.Plain("  Delete this vault")},
+		line{gui.Colored("     Delete the vault and its accounts from this computer, to start again.", gui.Muted)},
 	)
 	return append(lines, m.footer("number choose · esc back")...)
 }
