@@ -345,10 +345,14 @@ type dirEntry struct {
 	Type string `json:"type"` // "file" or "dir"
 }
 
-// listDir lists a folder of the repository; a missing folder is empty.
+// listDir lists a folder of the repository ("" the root); a missing folder is empty.
 func (g *github) listDir(ctx context.Context, repo, path string) ([]dirEntry, error) {
 	var es []dirEntry
-	code, err := g.call(ctx, "GET", "/repos/"+repo+"/contents/"+path, nil, &es)
+	p := "/repos/" + repo + "/contents"
+	if path != "" {
+		p += "/" + path
+	}
+	code, err := g.call(ctx, "GET", p, nil, &es)
 	if err != nil {
 		return nil, err
 	}

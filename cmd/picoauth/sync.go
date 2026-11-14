@@ -56,6 +56,7 @@ type syncView struct {
 	next   func(repo string) // what to do once the repository is known; runs in the user interface
 	onEsc  func()            // run when the user leaves while it works
 	pair   string            // the 6-digit code of a request for a new computer
+	note   string            // why this screen is here, when it is not obvious
 	code   string            // the login code to type on GitHub, while waiting for it
 	url    string            // where to type it
 	msg    string            // what Pico Auth is doing now
@@ -86,31 +87,14 @@ func (m *model) startLink() {
 // connect opens the sync screen, logs in to GitHub if needed (browser login, section 2.3), finds
 // the repository, asking which one if there are more, and goes on with v.next.
 func (m *model) connect(title string, back screen) *syncView {
-	ctx, cancel := context.WithCancel(context.Background())
-	v := &syncView{title: title, back: back, ctx: ctx, cancel: cancel, msg: "Connecting to GitHub…"}
-	v.later = func(f func()) {
-		m.ui(func() {
-			if m.sync == v && m.screen == screenSync {
-				f()
-			}
-		})
-	}
-	later := v.later
-	m.sync, m.screen = v, screenSync
+	v := m.newSyncView(title, back, "Connecting to GitHub…")
+	ctx, later := v.ctx, v.later
 	go func() {
 		repos, err := m.gh.repos(ctx)
 		if errors.Is(err, errLoginNeeded) {
-			var d *deviceCode
-			d, err = m.gh.startLogin(ctx)
+			err = m.deviceLogin(v)
 			if err == nil {
-				later(func() {
-					v.code, v.url, v.msg = d.UserCode, d.VerificationURI, "Waiting for GitHub…"
-					m.openURL(d.VerificationURI)
-				})
-				err = m.gh.waitLogin(ctx, d)
-			}
-			if err == nil {
-				later(func() { v.code, v.msg = "", "Looking for the repository…" })
+				later(func() { v.msg = "Looking for the repository…" })
 				repos, err = m.gh.repos(ctx)
 			}
 		}
@@ -129,6 +113,54 @@ func (m *model) connect(title string, back screen) *syncView {
 		})
 	}()
 	return v
+}
+
+// newSyncView opens the sync screen for a new run.
+func (m *model) newSyncView(title string, back screen, msg string) *syncView {
+	ctx, cancel := context.WithCancel(context.Background())
+	v := &syncView{title: title, back: back, ctx: ctx, cancel: cancel, msg: msg}
+	v.later = func(f func()) {
+		m.ui(func() {
+			if m.sync == v && m.screen == screenSync {
+				f()
+			}
+		})
+	}
+	m.sync, m.screen = v, screenSync
+	return v
+}
+
+// deviceLogin is the browser login (section 2.3): it shows the code and waits for GitHub.
+// It runs outside the user interface.
+func (m *model) deviceLogin(v *syncView) error {
+	d, err := m.gh.startLogin(v.ctx)
+	if err != nil {
+		return err
+	}
+	v.later(func() {
+		v.code, v.url, v.msg = d.UserCode, d.VerificationURI, "Waiting for GitHub…"
+		m.openURL(d.VerificationURI)
+	})
+	err = m.gh.waitLogin(v.ctx, d)
+	v.later(func() { v.code = "" })
+	return err
+}
+
+// relogin asks the browser login again, when the GitHub access expired, then runs then.
+func (m *model) relogin(then func()) {
+	v := m.newSyncView("GitHub login", screenList, "Connecting to GitHub…")
+	v.note = "The GitHub login expired: log in again, and the change is saved."
+	go func() {
+		err := m.deviceLogin(v)
+		v.later(func() {
+			if err != nil {
+				v.err = capitalize(err.Error())
+				return
+			}
+			m.screen = screenList
+			then()
+		})
+	}()
 }
 
 // linkTo checks that the repository holds no vault, then uploads this one, encrypted with
@@ -248,6 +280,9 @@ func (m *model) renderSettings() []line {
 func (m *model) renderSync() []line {
 	v := m.sync
 	lines := []line{{gui.Strong(v.title, nil)}, nil}
+	if v.note != "" {
+		lines = append(lines, line{gui.Plain(v.note)}, nil)
+	}
 	if v.code != "" {
 		lines = append(lines,
 			line{gui.Plain("1. In the browser, on "), gui.Strong(v.url, gui.ValueFg), gui.Colored("  (opened now)", gui.Muted)},

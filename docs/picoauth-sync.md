@@ -6,7 +6,7 @@ reasons behind each choice, so that work can continue from here without the orig
 Not everything here was agreed: the status of each point is the label it carries.
 
 **Block 1 is written and tried (2026-11-14): link the first computer** (section 5). **Block 2 is written,
-to try: add another computer** (section 6). Section 13 lists the blocks.
+to try: add another computer** (section 6). **Block 3 is written, to try: keep them aligned** (section 7). Section 13 lists the blocks.
 On GitHub everything is ready (2026-11-14): the GitHub App is registered
 (section 2.1), the author's repository is created and the app is installed on it (section 2.2).
 Today Pico Auth keeps the vault on one computer only
@@ -457,6 +457,20 @@ Added by block 1 (section 13):
   decided in section 5, not the place).
 
 Technical points never discussed with the author (to decide when building, do not present as decided):
+- **Proposed and written in block 3** (to confirm with the author):
+  - A linked computer reads the **root of the repository** at start and every 10 seconds, only while
+    the account list is on screen: one call gives the version (sha) of the vault and whether there are
+    requests. A different sha means a newer vault: it is downloaded and becomes the local copy.
+  - A change is uploaded replacing the sha read last; the local copy changes only when GitHub accepts.
+    While it uploads, "Saving on GitHub…" is shown and other changes wait. After a conflict the change
+    is applied again up to 5 times. An account is found again by its contents (name, user, secret,
+    settings), since accounts have no id: renamed here and deleted on another computer gives "the
+    account was deleted on another computer" (the delete wins, not "the last operation wins" written
+    in section 7); deleted on both is fine.
+  - Without GitHub (no connection, GitHub down): "No connection to GitHub: nothing was changed. The
+    codes still work." The checks fail silently and try again.
+  - If GitHub no longer accepts the access (the refresh too), a change opens the browser login again,
+    then is saved.
 - **Proposed and written in block 1** (to confirm with the author): the vault key is Argon2id on the
   master password, then HKDF-SHA256 with the second key (32 random bytes). The **local copy** of a
   linked computer is the **same file** as the one on GitHub (same key, same bytes). Envelope version 2
@@ -493,5 +507,7 @@ try in the app:
    **Written 2026-11-14, to try** (it needs a second computer, for example the Windows PC). The labels
    of the first-start menu are provisional (section 12).
 3. **Keep them aligned** (section 7): upload at every change, check every 10 seconds, offline changes
-   blocked, conflicts.
+   blocked, conflicts. **Written 2026-11-14, to try.** On the Mac alone the author can try the upload
+   (a commit "Pico Auth: vault changed" at every change) and the block without connection; changes
+   arriving from another computer need the PC.
 4. **Delete and unlink** (section 5).

@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"crypto/ecdh"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"sort"
+	"strings"
 	"time"
 
 	"picotools/internal/gui"
@@ -144,54 +146,48 @@ type pendingRequest struct {
 	code string
 }
 
-// checkRequests reads the requests of new computers, when this computer is linked and the
-// account list is on screen. Old requests are deleted.
-func (m *model) checkRequests() {
-	if m.link == nil || m.vault == nil || m.vault.second == nil || m.checking || m.screen != screenList {
+// fetchRequests reads the requests of new computers, the oldest first, and deletes the old ones.
+// It runs outside the user interface.
+func (m *model) fetchRequests(ctx context.Context, repo string, now time.Time) []*pendingRequest {
+	es, err := m.gh.listDir(ctx, repo, requestsDir)
+	if err != nil {
+		return nil
+	}
+	var found []*pendingRequest
+	created := map[*pendingRequest]time.Time{}
+	for _, e := range es {
+		name, ok := strings.CutSuffix(e.Name, ".json")
+		if e.Type != "file" || !ok {
+			continue
+		}
+		raw, sha, err := m.gh.getFile(ctx, repo, e.Path)
+		var r request
+		if err != nil || json.Unmarshal(raw, &r) != nil {
+			continue
+		}
+		if now.Sub(r.Created) > requestLife {
+			m.gh.deleteFile(ctx, repo, e.Path, sha, "Pico Auth: request expired")
+			continue
+		}
+		p := &pendingRequest{id: name, sha: sha, pub: r.PublicKey, code: pairCode(r.PublicKey)}
+		found = append(found, p)
+		created[p] = r.Created
+	}
+	sort.Slice(found, func(a, b int) bool { return created[found[a]].Before(created[found[b]]) })
+	return found
+}
+
+// showRequest shows the first request not yet approved or refused, if the list is on screen.
+func (m *model) showRequest(found []*pendingRequest) {
+	if m.screen != screenList {
 		return
 	}
-	m.checking = true
-	repo, ctx, now := m.link.Repo, m.background, m.now()
-	go func() {
-		es, err := m.gh.listDir(ctx, repo, requestsDir)
-		var found []*pendingRequest
-		var created []time.Time
-		for _, e := range es {
-			if err != nil || e.Type != "file" || len(e.Name) < 6 || e.Name[len(e.Name)-5:] != ".json" {
-				continue
-			}
-			raw, sha, err := m.gh.getFile(ctx, repo, e.Path)
-			var r request
-			if err != nil || json.Unmarshal(raw, &r) != nil {
-				continue
-			}
-			id := e.Name[:len(e.Name)-5]
-			if now.Sub(r.Created) > requestLife {
-				m.gh.deleteFile(ctx, repo, e.Path, sha, "Pico Auth: request expired")
-				continue
-			}
-			found = append(found, &pendingRequest{id: id, sha: sha, pub: r.PublicKey, code: pairCode(r.PublicKey)})
-			created = append(created, r.Created)
+	for _, r := range found {
+		if !m.handled[r.id] {
+			m.approving, m.screen = r, screenApprove
+			return
 		}
-		// The oldest first.
-		idx := make([]int, len(found))
-		for i := range idx {
-			idx[i] = i
-		}
-		sort.Slice(idx, func(a, b int) bool { return created[idx[a]].Before(created[idx[b]]) })
-		m.ui(func() {
-			m.checking = false
-			if m.screen != screenList {
-				return
-			}
-			for _, i := range idx {
-				if r := found[i]; !m.handled[r.id] {
-					m.approving, m.screen = r, screenApprove
-					return
-				}
-			}
-		})
-	}()
+	}
 }
 
 func (m *model) approveRune(r rune) {

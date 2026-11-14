@@ -41,7 +41,8 @@ type model struct {
 	startPage  int // first start: 0 the main menu, 1 open an existing vault
 	checkEvery time.Duration
 	lastCheck  time.Time
-	checking   bool            // reading the requests of new computers
+	checking   bool            // reading the repository
+	saving     bool            // a change is being uploaded
 	handled    map[string]bool // requests already approved or refused
 	approving  *pendingRequest // the request on screen
 	background context.Context // for the checks that run while Pico Auth is open
@@ -209,9 +210,9 @@ func (m *model) Rune(r rune) {
 		m.approveRune(r)
 
 	case screenList:
-		has := len(m.vault.Accounts) > 0
+		has := len(m.vault.Accounts) > 0 && !m.saving
 		switch {
-		case r == 'n':
+		case r == 'n' && !m.saving:
 			m.addForm()
 		case r == 'm' && has:
 			m.editForm()
@@ -256,7 +257,7 @@ func (m *model) CanPaste() bool { return m.screen == screenForm }
 func (m *model) tick() {
 	if m.now().Sub(m.lastCheck) >= m.checkEvery {
 		m.lastCheck = m.now()
-		m.checkRequests()
+		m.checkRemote()
 	}
 	if m.copied == "" || m.now().Sub(m.copiedAt) < clipboardLife {
 		return
@@ -382,13 +383,13 @@ func (m *model) addForm() {
 			acc.Name, acc.User = a[0], a[1]
 			m.pending, m.after, m.screen = acc, screenList, screenPreview
 			m.yes = func() {
-				m.vault.Accounts = append(m.vault.Accounts, acc)
-				if m.saveVault() {
+				m.apply(func(as []*Account) ([]*Account, error) {
+					c := *acc
+					return append(as, &c), nil
+				}, func() {
 					m.cursor = len(m.vault.Accounts) - 1
 					m.say(acc.Name + " saved")
-				} else {
-					m.vault.Accounts = m.vault.Accounts[:len(m.vault.Accounts)-1]
-				}
+				})
 			}
 			return ""
 		})
@@ -403,12 +404,14 @@ func (m *model) editForm() {
 		{label: "Account on the service", value: a.User, optional: true},
 	}, func(ans []string) string {
 		old := *a
-		a.Name, a.User = ans[0], ans[1]
-		if m.saveVault() {
-			m.say(a.Name + " saved")
-		} else {
-			*a = old
-		}
+		m.apply(func(as []*Account) ([]*Account, error) {
+			i := findAccount(as, old)
+			if i < 0 {
+				return nil, errDeletedElsewhere
+			}
+			as[i].Name, as[i].User = ans[0], ans[1]
+			return as, nil
+		}, func() { m.say(ans[0] + " saved") })
 		return ""
 	})
 }
@@ -421,14 +424,16 @@ func (m *model) deleteAccount() {
 		{gui.Colored("Its codes can no longer be made here: check that the phone still has it,", gui.Muted)},
 		{gui.Colored("or that you can log in to the service in another way.", gui.Muted)},
 	}, func() {
-		old := m.vault.Accounts
-		m.vault.Accounts = append(append([]*Account{}, old[:i]...), old[i+1:]...)
-		if !m.saveVault() {
-			m.vault.Accounts = old
-			return
-		}
-		m.cursor = min(m.cursor, max(len(m.vault.Accounts)-1, 0))
-		m.say(a.Name + " deleted")
+		old := *a
+		m.apply(func(as []*Account) ([]*Account, error) {
+			if i := findAccount(as, old); i >= 0 {
+				as = append(as[:i], as[i+1:]...)
+			}
+			return as, nil // already deleted elsewhere: nothing to do
+		}, func() {
+			m.clampCursor()
+			m.say(a.Name + " deleted")
+		})
 	})
 }
 

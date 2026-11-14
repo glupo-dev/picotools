@@ -62,6 +62,7 @@ func (f *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 			out(200, map[string]any{"error": "authorization_pending"})
 			return
 		}
+		f.access = "t1"
 		out(200, map[string]any{"access_token": "t1", "expires_in": 28800, "refresh_token": "r1", "refresh_token_expires_in": 15897600})
 		return
 	}
@@ -79,16 +80,27 @@ func (f *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		out(200, map[string]any{"repositories": rs})
 	case strings.HasPrefix(r.URL.Path, "/repos/"):
-		key := strings.Replace(strings.TrimPrefix(r.URL.Path, "/repos/"), "/contents/", "/", 1)
+		key := strings.TrimSuffix(strings.Replace(strings.TrimPrefix(r.URL.Path, "/repos/"), "/contents/", "/", 1), "/contents")
 		data, ok := f.files[key]
 		sha := shaOf(data)
 		if r.Method == "GET" && !ok {
+			// A folder: its files, and its subfolders once.
 			var es []map[string]any
+			dirs := map[string]bool{}
 			for k := range f.files {
-				if rest, found := strings.CutPrefix(k, key+"/"); found && !strings.Contains(rest, "/") {
-					path := strings.SplitN(k, "/", 3)[2]
-					es = append(es, map[string]any{"name": rest, "path": path, "sha": shaOf(f.files[k]), "type": "file"})
+				rest, found := strings.CutPrefix(k, key+"/")
+				if !found {
+					continue
 				}
+				repoLen := len(strings.Join(strings.SplitN(k, "/", 3)[:2], "/")) + 1
+				if dir, _, sub := strings.Cut(rest, "/"); sub {
+					if !dirs[dir] {
+						dirs[dir] = true
+						es = append(es, map[string]any{"name": dir, "path": k[repoLen:len(k)-len(rest)] + dir, "sha": "d", "type": "dir"})
+					}
+					continue
+				}
+				es = append(es, map[string]any{"name": rest, "path": k[repoLen:], "sha": shaOf(f.files[k]), "type": "file"})
 			}
 			if es != nil {
 				out(200, es)
@@ -498,3 +510,175 @@ func TestPairing(t *testing.T) {
 }
 
 func ecdhKey() (*ecdh.PrivateKey, error) { return ecdh.X25519().GenerateKey(rand.Reader) }
+
+const vaultKey = "genlupo/picoauth-vault/" + vaultFile
+
+// remote opens the vault on the fake GitHub with the keys of the Mac.
+func remote(t *testing.T, f *fakeGitHub, mac *syncModel) *Vault {
+	t.Helper()
+	v, err := decryptVault(f.file(vaultKey), "", mac.vault.password, mac.vault.second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v
+}
+
+// otherComputer saves on GitHub a change made by another linked computer.
+func otherComputer(t *testing.T, f *fakeGitHub, mac *syncModel, change func(v *Vault)) {
+	v := remote(t, f, mac)
+	change(v)
+	data, _ := v.encrypted()
+	f.mu.Lock()
+	f.files[vaultKey] = data
+	f.mu.Unlock()
+}
+
+// inSync checks that the local copy is the file on GitHub, at the version remembered.
+func inSync(t *testing.T, f *fakeGitHub, mac *syncModel) {
+	t.Helper()
+	local, _ := os.ReadFile(mac.path)
+	up := f.file(vaultKey)
+	if string(local) != string(up) || mac.link.SHA != shaOf(up) || loadLink(mac.path).SHA != mac.link.SHA {
+		t.Fatal("this computer and GitHub differ")
+	}
+}
+
+func TestChangesUploaded(t *testing.T) {
+	keyring.MockInit()
+	f := newFakeGitHub(t, "genlupo/picoauth-vault")
+	mac := linkedMac(t, f)
+
+	mac.Rune('n')
+	mac.typ("jbsw y3dp ehpk 3pxp")
+	mac.typ("Test")
+	mac.Key(gui.KeyEnter)
+	mac.Rune('y')
+	if !strings.Contains(mac.text(), "Saving on GitHub") {
+		t.Fatal(mac.text())
+	}
+	mac.Rune('n') // no other change while saving
+	if mac.screen != screenList {
+		t.Fatal(mac.text())
+	}
+	mac.until(t, func() bool { return !mac.saving })
+	if len(remote(t, f, mac).Accounts) != 2 || !strings.Contains(mac.text(), "Test saved") {
+		t.Fatal(mac.text())
+	}
+	inSync(t, f, mac)
+
+	mac.Rune('m')
+	for range len("Test") {
+		mac.Key(gui.KeyBackspace)
+	}
+	mac.typ("Test 2")
+	mac.Key(gui.KeyEnter)
+	mac.until(t, func() bool { return !mac.saving })
+	if remote(t, f, mac).Accounts[1].Name != "Test 2" {
+		t.Fatal(mac.text())
+	}
+	mac.Rune('d')
+	mac.Rune('y')
+	mac.until(t, func() bool { return !mac.saving })
+	if len(remote(t, f, mac).Accounts) != 1 || len(mac.vault.Accounts) != 1 {
+		t.Fatal(mac.text())
+	}
+	inSync(t, f, mac)
+}
+
+func TestConflict(t *testing.T) {
+	keyring.MockInit()
+	f := newFakeGitHub(t, "genlupo/picoauth-vault")
+	mac := linkedMac(t, f)
+
+	// The PC adds an account; the Mac does not know yet and renames its own.
+	otherComputer(t, f, mac, func(v *Vault) {
+		v.Accounts = append(v.Accounts, &Account{Kind: kindTOTP, Name: "Other", Secret: "JBSWY3DPEHPK3PXP", Algorithm: "SHA1", Digits: 6, Period: 30})
+	})
+	mac.Rune('m')
+	for range len("GitHub") {
+		mac.Key(gui.KeyBackspace)
+	}
+	mac.typ("GitHub work")
+	mac.Key(gui.KeyEnter)
+	mac.until(t, func() bool { return !mac.saving })
+
+	r := remote(t, f, mac)
+	if len(r.Accounts) != 2 || r.Accounts[0].Name != "GitHub work" || r.Accounts[1].Name != "Other" {
+		t.Fatalf("%+v %+v\n%s", r.Accounts[0], r.Accounts[len(r.Accounts)-1], mac.text())
+	}
+	inSync(t, f, mac)
+
+	// Renamed here, deleted on the PC: the rename cannot be done.
+	otherComputer(t, f, mac, func(v *Vault) { v.Accounts = v.Accounts[1:] })
+	mac.Rune('m')
+	mac.typ("X")
+	mac.Key(gui.KeyEnter)
+	mac.until(t, func() bool { return !mac.saving })
+	if !strings.Contains(mac.text(), "deleted on another computer") || len(mac.vault.Accounts) != 1 {
+		t.Fatal(mac.text())
+	}
+}
+
+func TestChangesArrive(t *testing.T) {
+	keyring.MockInit()
+	f := newFakeGitHub(t, "genlupo/picoauth-vault")
+	mac := linkedMac(t, f)
+	otherComputer(t, f, mac, func(v *Vault) { v.Accounts[0].Name = "Renamed on the PC" })
+
+	mac.lastCheck = time.Time{}
+	mac.tick()
+	mac.until(t, func() bool { return mac.vault.Accounts[0].Name == "Renamed on the PC" })
+	inSync(t, f, mac)
+}
+
+func TestOffline(t *testing.T) {
+	keyring.MockInit()
+	f := newFakeGitHub(t, "genlupo/picoauth-vault")
+	mac := linkedMac(t, f)
+	before, _ := os.ReadFile(mac.path)
+	mac.gh.api = "http://127.0.0.1:1" // nothing answers there
+
+	mac.Rune('d')
+	mac.Rune('y')
+	mac.until(t, func() bool { return !mac.saving })
+	if !strings.Contains(mac.text(), "No connection to GitHub") || len(mac.vault.Accounts) != 1 {
+		t.Fatal(mac.text())
+	}
+	after, _ := os.ReadFile(mac.path)
+	if string(before) != string(after) {
+		t.Fatal("changed without GitHub")
+	}
+	// The codes still work.
+	mac.Rune('1')
+	if mac.clip == "" {
+		t.Fatal("no code copied")
+	}
+	// The check finds nothing and says nothing.
+	mac.lastCheck = time.Time{}
+	mac.tick()
+	mac.until(t, func() bool { return !mac.checking })
+	if mac.screen != screenList {
+		t.Fatal(mac.text())
+	}
+}
+
+func TestLoginAgain(t *testing.T) {
+	keyring.MockInit()
+	f := newFakeGitHub(t, "genlupo/picoauth-vault")
+	mac := linkedMac(t, f)
+	f.mu.Lock()
+	f.access = "revoked" // GitHub no longer accepts the access of the Mac
+	f.mu.Unlock()
+
+	mac.Rune('d')
+	mac.Rune('y')
+	mac.until(t, func() bool { return mac.screen == screenSync && mac.sync.code != "" })
+	if !strings.Contains(mac.text(), "log in again") {
+		t.Fatal(mac.text())
+	}
+	mac.until(t, func() bool { return mac.screen == screenList && !mac.saving && len(mac.vault.Accounts) == 0 })
+	if len(remote(t, f, mac).Accounts) != 0 {
+		t.Fatal("not deleted on GitHub")
+	}
+	inSync(t, f, mac)
+}
