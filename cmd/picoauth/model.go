@@ -14,12 +14,14 @@ import (
 type screen int
 
 const (
-	screenStart   screen = iota // first start: new vault
-	screenList                  // the accounts with their codes
-	screenForm                  // questions, one after the other
-	screenConfirm               // a yes/no question
-	screenPreview               // a new account with its code, before saving it
-	screenFatal                 // something went wrong at start: only esc
+	screenStart    screen = iota // first start: new vault
+	screenList                   // the accounts with their codes
+	screenForm                   // questions, one after the other
+	screenConfirm                // a yes/no question
+	screenPreview                // a new account with its code, before saving it
+	screenSettings               // the rare operations on the whole vault
+	screenSync                   // linking the vault to GitHub, while it works
+	screenFatal                  // something went wrong at start: only esc
 )
 
 // How long a copied code stays in the clipboard.
@@ -29,7 +31,10 @@ const clipboardLife = 30 * time.Second
 // It knows nothing about the window: the clipboard and quitting go through callbacks.
 type model struct {
 	vault  *Vault
-	path   string // the vault file
+	path   string     // the vault file
+	link   *linkState // the GitHub link of this computer, nil if not linked
+	gh     *github
+	sync   *syncView
 	screen screen
 
 	cursor int // selected account
@@ -52,6 +57,8 @@ type model struct {
 	clipboard func() string
 	quit      func()
 	now       func() time.Time
+	ui        func(func()) // runs a function in the user interface, from any goroutine
+	openURL   func(string)
 }
 
 func newModel(path string) *model {
@@ -62,6 +69,9 @@ func newModel(path string) *model {
 		clipboard: func() string { return "" },
 		quit:      func() {},
 		now:       time.Now,
+		ui:        func(f func()) { f() },
+		openURL:   func(string) {},
+		gh:        newGitHub(),
 	}
 }
 
@@ -71,9 +81,10 @@ func (m *model) start() {
 		m.screen = screenStart
 		return
 	}
+	m.link = loadLink(m.path)
 	pw, err := savedPassword()
 	if err == nil && pw != "" {
-		v, err := openVault(m.path, pw)
+		v, err := m.openWith(pw)
 		if err == nil {
 			m.vault, m.screen = v, screenList
 			return
@@ -91,7 +102,7 @@ func (m *model) start() {
 func (m *model) askPassword() {
 	m.screen = screenFatal // esc quits
 	m.ask("Open Pico Auth", []question{{label: "Master password", secret: true}}, func(a []string) string {
-		v, err := openVault(m.path, a[0])
+		v, err := m.openWith(a[0])
 		if errors.Is(err, errWrongPassword) {
 			return "Wrong password"
 		}
@@ -105,6 +116,15 @@ func (m *model) askPassword() {
 		return ""
 	})
 	m.form.cancel = m.quit
+}
+
+// openWith opens the vault with a password and the second key of the keychain, if any.
+func (m *model) openWith(pw string) (*Vault, error) {
+	second, err := savedSecond()
+	if err != nil {
+		return nil, err
+	}
+	return openVault(m.path, pw, second)
 }
 
 func (m *model) fail(msg string) { m.fatal, m.screen = capitalize(msg), screenFatal }
@@ -134,6 +154,14 @@ func (m *model) Key(k string) {
 	case screenForm:
 		m.form.key(k)
 
+	case screenSettings:
+		if k == gui.KeyEsc {
+			m.screen = screenList
+		}
+
+	case screenSync:
+		m.syncKey(k)
+
 	case screenConfirm, screenPreview:
 		m.screen = m.after // any key other than y is no
 
@@ -159,6 +187,8 @@ func (m *model) Rune(r rune) {
 			m.editForm()
 		case r == 'd' && has:
 			m.deleteAccount()
+		case r == 's':
+			m.openSettings()
 		case r == 'q':
 			m.quit()
 		case r >= '1' && r <= '9':
@@ -167,6 +197,12 @@ func (m *model) Rune(r rune) {
 
 	case screenForm:
 		m.form.rune(r)
+
+	case screenSettings:
+		m.settingsRune(r)
+
+	case screenSync:
+		m.syncRune(r)
 
 	case screenConfirm, screenPreview:
 		m.screen = m.after

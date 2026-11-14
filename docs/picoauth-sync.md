@@ -5,7 +5,8 @@ Windows PC at work). This is the full design discussed with the author on 2026-1
 reasons behind each choice, so that work can continue from here without the original discussion.
 Not everything here was agreed: the status of each point is the label it carries.
 
-**No code is written yet.** On GitHub everything is ready (2026-11-14): the GitHub App is registered
+**Block 1 is written (2026-11-14): link the first computer** (section 5, and section 13 for the blocks).
+On GitHub everything is ready (2026-11-14): the GitHub App is registered
 (section 2.1), the author's repository is created and the app is installed on it (section 2.2).
 Today Pico Auth keeps the vault on one computer only
 (`picoauth/vault.picoauth` in the app settings folder). Export and restore were removed from the code on
@@ -436,6 +437,15 @@ All in `cmd/picoauth`:
   `enter`/`1-9` copy a code, `↑/↓` move, `esc`/`q` quit. Sync adds `s` Settings (section 5).
 - Tests: `totp_test.go`, `vault_test.go`, `model_test.go`. `./build.sh` builds every app into `dist/`.
 
+Added by block 1 (section 13):
+- `github.go`: the GitHub client. Device Flow login, the access in the keychain (entry `github access`)
+  renewed with the refresh token, the repositories where the app is installed, read and write a file
+  with its sha (a write refused because the file changed gives `errConflict`).
+- `sync.go`: the Settings page and the link flow of section 5, and `sync.json` next to the vault
+  (repository and sha of the last version uploaded).
+- `vault.go`: envelope version 2 and the second key (keychain entry `second key`).
+- `sync_test.go`: the link against a fake GitHub (no network).
+
 ---
 
 ## 12. Still open
@@ -446,14 +456,33 @@ All in `cmd/picoauth`:
   decided in section 5, not the place).
 
 Technical points never discussed with the author (to decide when building, do not present as decided):
-- How the master password and the second key are combined into the vault key (for example Argon2id on
-  the password, then HKDF with the second key), and whether the **local copy** on a linked computer uses
-  the same key as the copy on GitHub (this affects sections 5 and 7 and the delete rule).
-  The file envelope version goes from 1 to 2.
-- File names in the repository: the vault (for example `vault.picoauth`), requests and answers
-  (for example `requests/<id>.json`, `answers/<id>.json`); how the 6-digit code is computed from the
-  public key (for example a hash of it).
+- **Proposed and written in block 1** (to confirm with the author): the vault key is Argon2id on the
+  master password, then HKDF-SHA256 with the second key (32 random bytes). The **local copy** of a
+  linked computer is the **same file** as the one on GitHub (same key, same bytes). Envelope version 2
+  means "needs the second key"; version 1 is a vault not linked. The vault is `vault.picoauth` at the
+  root of the repository. The second key goes in the keychain **before** the upload, so a vault on
+  GitHub always has its key somewhere; the local copy becomes version 2 only after the upload worked.
+- File names of requests and answers (for example `requests/<id>.json`, `answers/<id>.json`); how the
+  6-digit code is computed from the public key (for example a hash of it).
+- To check with the real GitHub: whether the access is renewed **without a client secret** (there is
+  none, section 2.1). If GitHub refuses, Pico Auth asks the browser login again.
 - **Changing the master password**: today there is no such function; with sync the other computers
   would keep the old password in their keychain and must ask the new one.
 - Old or unanswered requests: when they are deleted. Two linked computers approving the same request
   at the same time. What the new computer does if no linked computer is open (wait, timeout).
+---
+
+## 13. Building it in blocks
+
+**Decided (2026-11-14).** The sync is written in blocks; each block ends with something the author can
+try in the app:
+1. **Link the first computer** (section 5): `s` → Settings → `1 Sync with GitHub` (label provisional),
+   browser login, the vault uploaded encrypted. **Written and tried by the author on 2026-11-14**
+   with the real GitHub: the vault is in `genlupo/picoauth-vault`. If the app can reach
+   more than one repository it asks which one (the proposal of 2.3).
+   Not in block 1: changes made after the link are saved only on this computer, and go to GitHub
+   from block 3.
+2. **Add another computer** (section 6): first-start menu, From GitHub, approval with the 6-digit code.
+3. **Keep them aligned** (section 7): upload at every change, check every 10 seconds, offline changes
+   blocked, conflicts.
+4. **Delete and unlink** (section 5).

@@ -28,6 +28,10 @@ func (m *model) Render(cols, rows int) []line {
 		lines = append(lines, nil, line{gui.Colored("y yes · any other key no", gui.Muted)})
 	case screenPreview:
 		lines = append(lines, m.renderPreview()...)
+	case screenSettings:
+		lines = append(lines, m.renderSettings()...)
+	case screenSync:
+		lines = append(lines, m.renderSync()...)
 	case screenFatal:
 		if m.fatal != "" {
 			lines = append(lines, line{gui.Strong("✘ "+m.fatal, gui.Red)}, nil)
@@ -112,9 +116,9 @@ func (m *model) renderList() []line {
 		lines = append(lines, line{gui.Colored(fmt.Sprintf("  ↓ %d more", len(as)-end), gui.Muted)})
 	}
 	lines = append(lines, nil, line{gui.Plain("  "), gui.Strong("n", gui.Accent), gui.Plain("  new account")})
-	hint := "n new · esc quit"
+	hint := "n new · s settings · esc quit"
 	if len(as) > 0 {
-		hint = "↑/↓ move · enter copy the code · number quick copy · n new · m edit · d delete · " + gui.FullScreenKey + " full screen · esc quit"
+		hint = "↑/↓ move · enter copy the code · number quick copy · n new · m edit · d delete · s settings · " + gui.FullScreenKey + " full screen · esc quit"
 	}
 	return append(lines, m.footer(hint)...)
 }

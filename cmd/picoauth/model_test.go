@@ -161,7 +161,7 @@ func TestFlow(t *testing.T) {
 	if len(tm4.vault.Accounts) != 0 {
 		t.Fatal("not deleted")
 	}
-	v, _ := openVault(tm4.path, "master-pw")
+	v, _ := openVault(tm4.path, "master-pw", nil)
 	if len(v.Accounts) != 0 {
 		t.Fatal("delete not saved")
 	}

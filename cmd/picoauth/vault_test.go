@@ -29,10 +29,10 @@ func TestVault(t *testing.T) {
 		t.Errorf("mode %v", info.Mode().Perm())
 	}
 
-	if _, err := openVault(path, "wrong"); !errors.Is(err, errWrongPassword) {
+	if _, err := openVault(path, "wrong", nil); !errors.Is(err, errWrongPassword) {
 		t.Errorf("wrong password: %v", err)
 	}
-	w, err := openVault(path, "correct horse")
+	w, err := openVault(path, "correct horse", nil)
 	if err != nil || len(w.Accounts) != 1 || *w.Accounts[0] != *v.Accounts[0] {
 		t.Fatalf("open: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestVault(t *testing.T) {
 	if err := w.save(); err != nil {
 		t.Fatal(err)
 	}
-	x, err := openVault(path, "correct horse")
+	x, err := openVault(path, "correct horse", nil)
 	if err != nil || x.Accounts[0].Name != "GitLab" {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestVault(t *testing.T) {
 	// Anything else is refused clearly.
 	other := filepath.Join(t.TempDir(), "x.json")
 	os.WriteFile(other, []byte(`{"hello":1}`), 0o600)
-	if _, err := openVault(other, "x"); err == nil || errors.Is(err, errWrongPassword) {
+	if _, err := openVault(other, "x", nil); err == nil || errors.Is(err, errWrongPassword) {
 		t.Errorf("not a vault: %v", err)
 	}
 }
