@@ -227,8 +227,11 @@ everyday actions on one account; linking to GitHub is a rare action on the whole
 next to them. So the list has **one key, `s`, that opens a separate page, Settings**, with the rare
 administration operations, among them the link to GitHub. The name: "Vault" was proposed and rejected by
 the author, because 99% of people do not know what a vault is; "Settings" is the name people look for
-when they want to change something of the app. The exact content of the page is still to define
-(**proposed**: also delete the local vault and unlink this computer, section 12).
+when they want to change something of the app.
+
+**Decided (2026-11-14): content of Settings, for now.** Only one item, the GitHub sync (its label is
+still to define). `esc` goes back to the account list, which is the home of Pico Auth. Where delete a
+local vault and unlink a computer go is still open (**proposed**: in Settings too, section 12).
 2. Browser login (2.3).
 3. Pico Auth finds the repository and checks that it holds **no vault** (a README or other files do not count).
 4. It creates the second key and keeps it in the keychain.
@@ -438,8 +441,9 @@ All in `cmd/picoauth`:
 ## 12. Still open
 
 - The **labels** of the first-start menu (section 4).
-- The **content of the Settings page** (section 5): the labels, and whether delete a local vault and
-  unlink a computer go there too (proposed, the rules are decided in section 5, not the place).
+- The **label** of the GitHub sync item in Settings (section 5).
+- Where **delete** a local vault and **unlink** a computer go (proposed: in Settings too; the rules are
+  decided in section 5, not the place).
 
 Technical points never discussed with the author (to decide when building, do not present as decided):
 - How the master password and the second key are combined into the vault key (for example Argon2id on
