@@ -5,7 +5,8 @@ Windows PC at work). This is the full design discussed with the author on 2026-1
 reasons behind each choice, so that work can continue from here without the original discussion.
 Not everything here was agreed: the status of each point is the label it carries.
 
-**No code is written yet.** Only the GitHub App is registered (section 2.1, 2026-11-14).
+**No code is written yet.** On GitHub everything is ready (2026-11-14): the GitHub App is registered
+(section 2.1), the author's repository is created and the app is installed on it (section 2.2).
 Today Pico Auth keeps the vault on one computer only
 (`picoauth/vault.picoauth` in the app settings folder) and moves it with Export → backup file.
 
@@ -118,6 +119,22 @@ the homepage link and the permissions. It shows nothing about who installed it o
 2. On the app page click **Install** → **Only select repositories** → that repository.
    "Install" here means giving the app access to that repository: nothing is installed on a computer.
    Pico Auth can show or open the link of the app page.
+
+**Done by the author on 2026-11-14:**
+- Repository **`genlupo/picoauth-vault`**, in the personal account genlupo (the author's choice: the
+  vault holds personal codes, it is not part of the project; it is also how another user will do it).
+  **Private**, with a README only (a README does not count as a vault, section 5), no .gitignore,
+  no license. Created from github.com: **+** top right → **New repository**.
+- App **installed** on genlupo with **Only select repositories** → `picoauth-vault`.
+  "All repositories" would let Pico Auth read and write every repository of the account (and future
+  ones): an access stolen from a computer could touch all of them. With one repository it can touch
+  only the encrypted vault, and Pico Auth can find the repository by itself (2.3).
+  Done from the app settings (glupo-dev → Developer settings → GitHub Apps → Pico Auth → **Install App**
+  → Install next to genlupo); another user does it from the public page `github.com/apps/pico-auth`.
+- The installation page, to find it again: avatar → **Settings** → **Applications** (under
+  Integrations) → **Configure** next to Pico Auth. From there: change the repositories the app sees;
+  **Suspend** (blocks the app's access, can be undone); **Uninstall** (removes the app: no computer can
+  read or write the vault on GitHub any more).
 
 ### 2.3 Link a computer: browser login (decided)
 
