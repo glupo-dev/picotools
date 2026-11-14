@@ -32,6 +32,8 @@ func (m *model) Render(cols, rows int) []line {
 		lines = append(lines, m.renderSettings()...)
 	case screenSync:
 		lines = append(lines, m.renderSync()...)
+	case screenApprove:
+		lines = append(lines, m.renderApprove()...)
 	case screenFatal:
 		if m.fatal != "" {
 			lines = append(lines, line{gui.Strong("✘ "+m.fatal, gui.Red)}, nil)
@@ -51,6 +53,14 @@ func (m *model) footer(hint string) []line {
 }
 
 func (m *model) renderStart() []line {
+	if m.startPage == 1 {
+		return append([]line{
+			{gui.Strong("Open an existing vault", nil)},
+			nil,
+			{gui.Plain("  "), gui.Strong("1", gui.Accent), gui.Plain("  From GitHub")},
+			{gui.Colored("     The vault is on GitHub and another computer of yours is already linked to it.", gui.Muted)},
+		}, m.footer("number choose · esc back")...)
+	}
 	return append([]line{
 		{gui.Strong("Welcome", nil)},
 		{gui.Colored("The accounts are kept in a file encrypted with a master password of your choice.", gui.Muted)},
@@ -58,6 +68,7 @@ func (m *model) renderStart() []line {
 		{gui.Colored("If you lose it, the vault cannot be opened by anyone: write it down somewhere safe.", gui.Muted)},
 		nil,
 		{gui.Plain("  "), gui.Strong("1", gui.Accent), gui.Plain("  New vault")},
+		{gui.Plain("  "), gui.Strong("2", gui.Accent), gui.Plain("  Open an existing vault")},
 	}, m.footer("number choose · esc quit")...)
 }
 

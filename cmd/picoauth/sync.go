@@ -48,12 +48,18 @@ func (l *linkState) save(vault string) error {
 
 // syncView is the state of the sync screen while it works.
 type syncView struct {
-	run    int // which run this is: an answer of an older, cancelled run is dropped
+	title  string
+	back   screen // where esc goes
+	ctx    context.Context
 	cancel context.CancelFunc
-	code   string   // the login code to type on GitHub, while waiting for it
-	url    string   // where to type it
-	msg    string   // what Pico Auth is doing now
-	repos  []string // the repositories to choose from, when there is more than one
+	later  func(func())      // runs a function in the user interface, only if this run was not cancelled
+	next   func(repo string) // what to do once the repository is known; runs in the user interface
+	onEsc  func()            // run when the user leaves while it works
+	pair   string            // the 6-digit code of a request for a new computer
+	code   string            // the login code to type on GitHub, while waiting for it
+	url    string            // where to type it
+	msg    string            // what Pico Auth is doing now
+	repos  []string          // the repositories to choose from, when there is more than one
 	err    string
 	done   string
 }
@@ -73,21 +79,24 @@ func (m *model) settingsRune(r rune) {
 // ---- Link this vault to GitHub ----
 
 func (m *model) startLink() {
+	v := m.connect("Settings › Sync with GitHub", screenSettings)
+	v.next = func(repo string) { m.linkTo(v, repo) }
+}
+
+// connect opens the sync screen, logs in to GitHub if needed (browser login, section 2.3), finds
+// the repository, asking which one if there are more, and goes on with v.next.
+func (m *model) connect(title string, back screen) *syncView {
 	ctx, cancel := context.WithCancel(context.Background())
-	run := 1
-	if m.sync != nil {
-		run = m.sync.run + 1
-	}
-	v := &syncView{run: run, cancel: cancel, msg: "Connecting to GitHub…"}
-	m.sync, m.screen = v, screenSync
-	// later runs f in the user interface, only if this run was not cancelled.
-	later := func(f func()) {
+	v := &syncView{title: title, back: back, ctx: ctx, cancel: cancel, msg: "Connecting to GitHub…"}
+	v.later = func(f func()) {
 		m.ui(func() {
 			if m.sync == v && m.screen == screenSync {
 				f()
 			}
 		})
 	}
+	later := v.later
+	m.sync, m.screen = v, screenSync
 	go func() {
 		repos, err := m.gh.repos(ctx)
 		if errors.Is(err, errLoginNeeded) {
@@ -113,17 +122,19 @@ func (m *model) startLink() {
 				v.err = "Pico Auth cannot reach any repository: install it on a private repository of yours " +
 					"(github.com/apps/pico-auth → Install → Only select repositories)"
 			case len(repos) == 1:
-				m.linkTo(ctx, v, later, repos[0])
+				v.next(repos[0])
 			default:
 				v.repos, v.msg = repos, ""
 			}
 		})
 	}()
+	return v
 }
 
 // linkTo checks that the repository holds no vault, then uploads this one, encrypted with
 // master password + a new second key. It runs in the user interface.
-func (m *model) linkTo(ctx context.Context, v *syncView, later func(func()), repo string) {
+func (m *model) linkTo(v *syncView, repo string) {
+	ctx, later := v.ctx, v.later
 	v.repos, v.msg = nil, "Checking "+repo+"…"
 	go func() {
 		_, _, err := m.gh.getFile(ctx, repo, vaultFile)
@@ -197,8 +208,11 @@ func (m *model) syncKey(k string) {
 	}
 	if m.sync.busy() || m.sync.repos != nil {
 		m.sync.cancel()
+		if m.sync.onEsc != nil {
+			m.sync.onEsc()
+		}
 	}
-	m.screen = screenSettings
+	m.screen = m.sync.back
 }
 
 func (m *model) syncRune(r rune) {
@@ -210,16 +224,9 @@ func (m *model) syncRune(r rune) {
 	if i >= len(v.repos) {
 		return
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	v.cancel = cancel
-	later := func(f func()) {
-		m.ui(func() {
-			if m.sync == v && m.screen == screenSync {
-				f()
-			}
-		})
-	}
-	m.linkTo(ctx, v, later, v.repos[i])
+	repo := v.repos[i]
+	v.repos = nil
+	v.next(repo)
 }
 
 // ---- Screens ----
@@ -240,12 +247,19 @@ func (m *model) renderSettings() []line {
 
 func (m *model) renderSync() []line {
 	v := m.sync
-	lines := []line{{gui.Strong("Settings › Sync with GitHub", nil)}, nil}
+	lines := []line{{gui.Strong(v.title, nil)}, nil}
 	if v.code != "" {
 		lines = append(lines,
 			line{gui.Plain("1. In the browser, on "), gui.Strong(v.url, gui.ValueFg), gui.Colored("  (opened now)", gui.Muted)},
 			line{gui.Plain("2. type this code:   "), gui.Strong(v.code, gui.ValueFg)},
 			line{gui.Plain("3. and click "), gui.Strong("Authorize", nil), gui.Plain(".")},
+			nil,
+		)
+	}
+	if v.pair != "" {
+		lines = append(lines,
+			line{gui.Plain("A linked computer of yours must approve this one. On it, open Pico Auth:")},
+			line{gui.Plain("it shows a code. Approve only if it is this one:  "), gui.Strong(v.pair, gui.ValueFg)},
 			nil,
 		)
 	}

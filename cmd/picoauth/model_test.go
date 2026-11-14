@@ -53,9 +53,14 @@ func TestFlow(t *testing.T) {
 	if tm.screen != screenStart {
 		t.Fatalf("screen %v", tm.screen)
 	}
-	if strings.Contains(tm.text(), "2  ") {
-		t.Fatal("the first start offers more than a new vault:\n" + tm.text())
+	if !strings.Contains(tm.text(), "2  Open an existing vault") {
+		t.Fatal(tm.text())
 	}
+	tm.Rune('2')
+	if !strings.Contains(tm.text(), "1  From GitHub") {
+		t.Fatal(tm.text())
+	}
+	tm.Key(gui.KeyEsc)
 
 	// New vault: the password must be long enough and typed twice the same.
 	tm.Rune('1')

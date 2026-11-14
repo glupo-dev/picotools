@@ -5,7 +5,8 @@ Windows PC at work). This is the full design discussed with the author on 2026-1
 reasons behind each choice, so that work can continue from here without the original discussion.
 Not everything here was agreed: the status of each point is the label it carries.
 
-**Block 1 is written (2026-11-14): link the first computer** (section 5, and section 13 for the blocks).
+**Block 1 is written and tried (2026-11-14): link the first computer** (section 5). **Block 2 is written,
+to try: add another computer** (section 6). Section 13 lists the blocks.
 On GitHub everything is ready (2026-11-14): the GitHub App is registered
 (section 2.1), the author's repository is created and the app is installed on it (section 2.2).
 Today Pico Auth keeps the vault on one computer only
@@ -462,8 +463,14 @@ Technical points never discussed with the author (to decide when building, do no
   means "needs the second key"; version 1 is a vault not linked. The vault is `vault.picoauth` at the
   root of the repository. The second key goes in the keychain **before** the upload, so a vault on
   GitHub always has its key somewhere; the local copy becomes version 2 only after the upload worked.
-- File names of requests and answers (for example `requests/<id>.json`, `answers/<id>.json`); how the
-  6-digit code is computed from the public key (for example a hash of it).
+- **Proposed and written in block 2** (to confirm with the author): the request is
+  `requests/<id>.json` (an X25519 public key and the time), the answer `answers/<id>.json` (the second
+  key encrypted with AES-256-GCM, key from X25519 between a one-time key of the linked computer and the
+  request, then HKDF-SHA256). The 6-digit code is the first 4 bytes of SHA-256 of the public key, modulo
+  one million, shown as `482 913`. A linked computer checks the requests when the account list is on
+  screen, at start and every 10 seconds; it deletes requests older than 15 minutes. The new computer
+  keeps its private key only in memory: closing it or pressing esc withdraws the request. The new
+  computer deletes request and answer once it has the second key.
 - To check with the real GitHub: whether the access is renewed **without a client secret** (there is
   none, section 2.1). If GitHub refuses, Pico Auth asks the browser login again.
 - **Changing the master password**: today there is no such function; with sync the other computers
@@ -483,6 +490,8 @@ try in the app:
    Not in block 1: changes made after the link are saved only on this computer, and go to GitHub
    from block 3.
 2. **Add another computer** (section 6): first-start menu, From GitHub, approval with the 6-digit code.
+   **Written 2026-11-14, to try** (it needs a second computer, for example the Windows PC). The labels
+   of the first-start menu are provisional (section 12).
 3. **Keep them aligned** (section 7): upload at every change, check every 10 seconds, offline changes
    blocked, conflicts.
 4. **Delete and unlink** (section 5).

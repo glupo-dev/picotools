@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"os"
@@ -21,6 +22,7 @@ const (
 	screenPreview                // a new account with its code, before saving it
 	screenSettings               // the rare operations on the whole vault
 	screenSync                   // linking the vault to GitHub, while it works
+	screenApprove                // a new computer asks for access
 	screenFatal                  // something went wrong at start: only esc
 )
 
@@ -30,12 +32,20 @@ const clipboardLife = 30 * time.Second
 // model holds the state of Pico Auth and reacts to keys.
 // It knows nothing about the window: the clipboard and quitting go through callbacks.
 type model struct {
-	vault  *Vault
-	path   string     // the vault file
-	link   *linkState // the GitHub link of this computer, nil if not linked
-	gh     *github
-	sync   *syncView
-	screen screen
+	vault *Vault
+	path  string     // the vault file
+	link  *linkState // the GitHub link of this computer, nil if not linked
+	gh    *github
+	sync  *syncView
+
+	startPage  int // first start: 0 the main menu, 1 open an existing vault
+	checkEvery time.Duration
+	lastCheck  time.Time
+	checking   bool            // reading the requests of new computers
+	handled    map[string]bool // requests already approved or refused
+	approving  *pendingRequest // the request on screen
+	background context.Context // for the checks that run while Pico Auth is open
+	screen     screen
 
 	cursor int // selected account
 
@@ -63,15 +73,18 @@ type model struct {
 
 func newModel(path string) *model {
 	return &model{
-		path:      path,
-		cols:      gui.DefaultCols,
-		copy:      func(string) {},
-		clipboard: func() string { return "" },
-		quit:      func() {},
-		now:       time.Now,
-		ui:        func(f func()) { f() },
-		openURL:   func(string) {},
-		gh:        newGitHub(),
+		path:       path,
+		cols:       gui.DefaultCols,
+		copy:       func(string) {},
+		clipboard:  func() string { return "" },
+		quit:       func() {},
+		now:        time.Now,
+		ui:         func(f func()) { f() },
+		openURL:    func(string) {},
+		gh:         newGitHub(),
+		checkEvery: checkEvery,
+		handled:    map[string]bool{},
+		background: context.Background(),
 	}
 }
 
@@ -136,7 +149,16 @@ func (m *model) Key(k string) {
 		m.status = nil
 	}
 	switch m.screen {
-	case screenStart, screenFatal:
+	case screenStart:
+		if k == gui.KeyEsc {
+			if m.startPage == 1 {
+				m.startPage = 0
+			} else {
+				m.quit()
+			}
+		}
+
+	case screenFatal:
 		if k == gui.KeyEsc {
 			m.quit()
 		}
@@ -174,9 +196,17 @@ func (m *model) Rune(r rune) {
 	}
 	switch m.screen {
 	case screenStart:
-		if r == '1' {
+		switch {
+		case m.startPage == 0 && r == '1':
 			m.newVaultForm()
+		case m.startPage == 0 && r == '2':
+			m.startPage = 1
+		case m.startPage == 1 && r == '1':
+			m.startJoin()
 		}
+
+	case screenApprove:
+		m.approveRune(r)
 
 	case screenList:
 		has := len(m.vault.Accounts) > 0
@@ -224,6 +254,10 @@ func (m *model) CanPaste() bool { return m.screen == screenForm }
 // tick runs every second: the codes on screen change by themselves, and a copied code
 // leaves the clipboard after clipboardLife, if nothing else was copied in the meantime.
 func (m *model) tick() {
+	if m.now().Sub(m.lastCheck) >= m.checkEvery {
+		m.lastCheck = m.now()
+		m.checkRequests()
+	}
 	if m.copied == "" || m.now().Sub(m.copiedAt) < clipboardLife {
 		return
 	}

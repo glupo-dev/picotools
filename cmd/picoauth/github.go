@@ -337,6 +337,47 @@ func (g *github) putFile(ctx context.Context, repo, path string, data []byte, sh
 	}
 }
 
+// dirEntry is a file in a folder of the repository.
+type dirEntry struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+	SHA  string `json:"sha"`
+	Type string `json:"type"` // "file" or "dir"
+}
+
+// listDir lists a folder of the repository; a missing folder is empty.
+func (g *github) listDir(ctx context.Context, repo, path string) ([]dirEntry, error) {
+	var es []dirEntry
+	code, err := g.call(ctx, "GET", "/repos/"+repo+"/contents/"+path, nil, &es)
+	if err != nil {
+		return nil, err
+	}
+	switch code {
+	case http.StatusOK:
+		return es, nil
+	case http.StatusNotFound:
+		return nil, nil
+	default:
+		return nil, fmt.Errorf("GitHub answered %d listing %s", code, path)
+	}
+}
+
+// deleteFile deletes a file at the version sha; a file already gone is fine.
+func (g *github) deleteFile(ctx context.Context, repo, path, sha, message string) error {
+	code, err := g.call(ctx, "DELETE", "/repos/"+repo+"/contents/"+path, map[string]string{"message": message, "sha": sha}, nil)
+	if err != nil {
+		return err
+	}
+	switch code {
+	case http.StatusOK, http.StatusNotFound:
+		return nil
+	case http.StatusConflict, http.StatusUnprocessableEntity:
+		return errConflict
+	default:
+		return fmt.Errorf("GitHub answered %d deleting %s", code, path)
+	}
+}
+
 // ---- The access in the keychain ----
 
 const keyringToken = "github access"

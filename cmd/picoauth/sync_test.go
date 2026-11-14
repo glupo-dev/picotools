@@ -1,10 +1,13 @@
 package main
 
 import (
+	"crypto/ecdh"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -78,7 +81,33 @@ func (f *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(r.URL.Path, "/repos/"):
 		key := strings.Replace(strings.TrimPrefix(r.URL.Path, "/repos/"), "/contents/", "/", 1)
 		data, ok := f.files[key]
-		sha := fmt.Sprintf("sha%d", len(data))
+		sha := shaOf(data)
+		if r.Method == "GET" && !ok {
+			var es []map[string]any
+			for k := range f.files {
+				if rest, found := strings.CutPrefix(k, key+"/"); found && !strings.Contains(rest, "/") {
+					path := strings.SplitN(k, "/", 3)[2]
+					es = append(es, map[string]any{"name": rest, "path": path, "sha": shaOf(f.files[k]), "type": "file"})
+				}
+			}
+			if es != nil {
+				out(200, es)
+				return
+			}
+		}
+		if r.Method == "DELETE" {
+			var body struct{ SHA string }
+			json.NewDecoder(r.Body).Decode(&body)
+			if !ok {
+				out(404, map[string]any{"message": "Not Found"})
+			} else if body.SHA != sha {
+				out(409, map[string]any{"message": "conflict"})
+			} else {
+				delete(f.files, key)
+				out(200, map[string]any{})
+			}
+			return
+		}
 		if r.Method == "GET" {
 			if !ok {
 				out(404, map[string]any{"message": "Not Found"})
@@ -94,10 +123,27 @@ func (f *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		f.files[key], _ = base64.StdEncoding.DecodeString(body.Content)
-		out(201, map[string]any{"content": map[string]any{"sha": fmt.Sprintf("sha%d", len(f.files[key]))}})
+		out(201, map[string]any{"content": map[string]any{"sha": shaOf(f.files[key])}})
 	default:
 		out(404, map[string]any{"message": "Not Found"})
 	}
+}
+
+func shaOf(data []byte) string {
+	h := sha256.Sum256(data)
+	return hex.EncodeToString(h[:8])
+}
+
+func (f *fakeGitHub) count(prefix string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for k := range f.files {
+		if strings.HasPrefix(k, prefix) {
+			n++
+		}
+	}
+	return n
 }
 
 func (f *fakeGitHub) file(key string) []byte {
@@ -119,6 +165,7 @@ func newSyncModel(t *testing.T, dir string, f *fakeGitHub) *syncModel {
 	tm.ui = func(fn func()) { sm.ui <- fn }
 	tm.openURL = func(u string) { sm.opened = u }
 	tm.gh.web, tm.gh.api = f.srv.URL, f.srv.URL
+	tm.checkEvery = 10 * time.Millisecond
 	return sm
 }
 
@@ -305,3 +352,149 @@ func TestAccessRenewed(t *testing.T) {
 		t.Fatalf("keychain %+v", tok)
 	}
 }
+
+// linkedMac is a Mac with a vault of one account, linked to the fake GitHub.
+func linkedMac(t *testing.T, f *fakeGitHub) *syncModel {
+	mac := newSyncModel(t, t.TempDir(), f)
+	mac.newVault("master-pw")
+	mac.vault.Accounts = []*Account{{Kind: kindTOTP, Name: "GitHub", User: "me", Secret: "JBSWY3DPEHPK3PXP", Algorithm: "SHA1", Digits: 6, Period: 30}}
+	mac.vault.save()
+	mac.Rune('s')
+	mac.Rune('1')
+	mac.until(t, func() bool { return !mac.sync.busy() })
+	mac.Key(gui.KeyEsc)
+	mac.Key(gui.KeyEsc)
+	if mac.screen != screenList || mac.link == nil {
+		t.Fatal(mac.text())
+	}
+	return mac
+}
+
+// newPC is a new computer, with its own empty keychain, asking for access from GitHub.
+func newPC(t *testing.T, f *fakeGitHub) *syncModel {
+	keyring.MockInit() // the Mac keeps what it needs in memory
+	pc := newSyncModel(t, t.TempDir(), f)
+	pc.Rune('2')
+	pc.Rune('1')
+	pc.until(t, func() bool { return pc.sync.pair != "" })
+	return pc
+}
+
+func TestAddComputer(t *testing.T) {
+	keyring.MockInit()
+	f := newFakeGitHub(t, "genlupo/picoauth-vault")
+	mac := linkedMac(t, f)
+	macSecond := mac.vault.second
+
+	pc := newPC(t, f)
+	if !strings.Contains(pc.text(), pc.sync.pair) || f.count("genlupo/picoauth-vault/requests/") != 1 {
+		t.Fatal(pc.text())
+	}
+
+	// The Mac finds the request at its next check, with the same code.
+	mac.tick()
+	mac.until(t, func() bool { return mac.screen == screenApprove })
+	if mac.approving.code != pc.sync.pair || !strings.Contains(mac.text(), pc.sync.pair) {
+		t.Fatalf("%s\n%s", mac.approving.code, mac.text())
+	}
+
+	// y and the master password: a wrong one is refused.
+	mac.Rune('y')
+	mac.typ("wrong")
+	if !strings.Contains(mac.text(), "Wrong password") {
+		t.Fatal(mac.text())
+	}
+	for range 5 {
+		mac.Key(gui.KeyBackspace)
+	}
+	mac.typ("master-pw")
+	mac.until(t, func() bool { return strings.Contains(mac.text(), "Approved") })
+
+	// The PC gets the second key and asks the master password once.
+	pc.until(t, func() bool { return pc.screen == screenForm })
+	pc.typ("master-pw")
+	if pc.screen != screenList || len(pc.vault.Accounts) != 1 || pc.link == nil {
+		t.Fatal(pc.text())
+	}
+	if s, _ := savedSecond(); string(s) != string(macSecond) {
+		t.Fatal("the PC has not the same second key")
+	}
+	if f.count("genlupo/picoauth-vault/requests/")+f.count("genlupo/picoauth-vault/answers/") != 0 {
+		t.Fatal("request and answer not deleted")
+	}
+
+	// Next start on the PC opens by itself.
+	again := newTestModel(t, pc.path[:len(pc.path)-len("/picoauth/vault.picoauth")])
+	if again.screen != screenList || len(again.vault.Accounts) != 1 {
+		t.Fatal(again.text())
+	}
+}
+
+func TestRefuseComputer(t *testing.T) {
+	keyring.MockInit()
+	f := newFakeGitHub(t, "genlupo/picoauth-vault")
+	mac := linkedMac(t, f)
+	pc := newPC(t, f)
+
+	mac.tick()
+	mac.until(t, func() bool { return mac.screen == screenApprove })
+	mac.Rune('n')
+	if mac.screen != screenList || !strings.Contains(mac.text(), "Request refused") {
+		t.Fatal(mac.text())
+	}
+	pc.until(t, func() bool { return pc.screen == screenStart })
+	if !strings.Contains(pc.text(), "Request refused or expired") || pc.vault != nil {
+		t.Fatal(pc.text())
+	}
+	// The refused request is not shown again.
+	mac.lastCheck = time.Time{}
+	mac.tick()
+	time.Sleep(50 * time.Millisecond)
+	for len(mac.ui) > 0 {
+		(<-mac.ui)()
+	}
+	if mac.screen != screenList {
+		t.Fatal(mac.text())
+	}
+}
+
+func TestJoinWithoutVault(t *testing.T) {
+	keyring.MockInit()
+	f := newFakeGitHub(t, "genlupo/picoauth-vault")
+	pc := newSyncModel(t, t.TempDir(), f)
+	pc.Rune('2')
+	pc.Rune('1')
+	pc.until(t, func() bool { return !pc.sync.busy() })
+	if !strings.Contains(pc.sync.err, "holds no vault") || f.count("genlupo/picoauth-vault/requests/") != 0 {
+		t.Fatal(pc.text())
+	}
+	pc.Key(gui.KeyEsc)
+	if pc.screen != screenStart {
+		t.Fatal(pc.screen)
+	}
+}
+
+func TestPairing(t *testing.T) {
+	second, _ := newSecond()
+	priv, _ := ecdhKey()
+	body, err := sealSecond(priv.PublicKey().Bytes(), "abc", second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := openSecond(priv, "abc", body)
+	if err != nil || string(got) != string(second) {
+		t.Fatal(err)
+	}
+	if _, err := openSecond(priv, "other", body); err == nil {
+		t.Fatal("opened with another id")
+	}
+	other, _ := ecdhKey()
+	if _, err := openSecond(other, "abc", body); err == nil {
+		t.Fatal("opened by another computer")
+	}
+	if c := pairCode(priv.PublicKey().Bytes()); len(c) != 7 || c[3] != ' ' {
+		t.Fatal(c)
+	}
+}
+
+func ecdhKey() (*ecdh.PrivateKey, error) { return ecdh.X25519().GenerateKey(rand.Reader) }
