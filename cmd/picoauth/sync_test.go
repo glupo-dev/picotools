@@ -786,7 +786,7 @@ func TestUnlink(t *testing.T) {
 
 	// The list of linked computers.
 	mac.Rune('s')
-	if !strings.Contains(mac.text(), "1  Unlink this device") || strings.Contains(mac.text(), "Delete this vault") {
+	if !strings.Contains(mac.text(), "1  Reset this device") || strings.Contains(mac.text(), "Delete this vault") {
 		t.Fatal(mac.text())
 	}
 	mac.Rune('2')
@@ -824,7 +824,7 @@ func TestUnlink(t *testing.T) {
 	mac.typ("delete")
 	mac.typ("master-pw")
 	mac.until(t, func() bool { return mac.screen == screenStart })
-	if !strings.Contains(mac.text(), "unlinked") {
+	if !strings.Contains(mac.text(), "This device is reset") {
 		t.Fatal(mac.text())
 	}
 	for _, p := range []string{mac.path, linkPath(mac.path)} {

@@ -179,7 +179,7 @@ func (m *model) renderComputers() []line {
 			lines = append(lines, l)
 		}
 		lines = append(lines, nil,
-			line{gui.Colored("Each device is unlinked from itself, with Settings › Unlink this device.", gui.Muted)})
+			line{gui.Colored("Each device is removed from itself, with Settings › Reset this device.", gui.Muted)})
 	}
 	return append(lines, m.footer("esc back")...)
 }

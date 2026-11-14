@@ -49,14 +49,14 @@ func (m *model) unlinkForm() {
 			if others == 0 {
 				warning = "This is the only linked device: after this, nobody can open the vault on GitHub any more. Type delete to confirm"
 			}
-			m.confirmForget("Unlink this device", warning, func() { m.unlink(l) })
+			m.confirmForget("Reset this device", warning, func() { m.unlink(l) })
 		})
 	}()
 }
 
 // unlink deletes the file of this computer from GitHub, then everything here.
 func (m *model) unlink(l *linkState) {
-	m.status = gui.Line{gui.Colored("Unlinking…", gui.Muted)}
+	m.status = gui.Line{gui.Colored("Resetting…", gui.Muted)}
 	ctx := m.background
 	go func() {
 		var err error
@@ -79,7 +79,7 @@ func (m *model) unlink(l *linkState) {
 				m.unlinkFailed(err)
 				return
 			}
-			m.forgotten("This device is unlinked: the vault is still on GitHub")
+			m.forgotten("This device is reset: the vault is still on GitHub")
 		})
 	}()
 }
@@ -89,9 +89,9 @@ func (m *model) unlinkFailed(err error) {
 	case errors.Is(err, errLoginNeeded):
 		m.relogin(func() { m.screen = screenSettings; m.unlinkForm() })
 	case offline(err):
-		m.warn("No connection to GitHub: nothing was changed. A device is unlinked only online.")
+		m.warn("No connection to GitHub: nothing was changed. A device is reset only online.")
 	default:
-		m.warn("Could not unlink, nothing was changed: " + err.Error())
+		m.warn("Could not reset, nothing was changed: " + err.Error())
 	}
 }
 

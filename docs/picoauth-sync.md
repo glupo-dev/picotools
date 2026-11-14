@@ -256,7 +256,7 @@ in front of the user. A linked computer holds the **local copy** of the vault an
 1. asks confirmation by typing `delete` and the master password (as deleting a local vault above);
 2. deletes the local copy of the vault;
 3. deletes master password, second key and GitHub access from the keychain.
-(Written in block 4 as **Unlink this device**, in Settings. Added in the code, **proposed**: it also
+(Written in block 4 as **Reset this device**, in Settings: first called "Unlink this device", renamed on 2026-11-14 by the author because "unlink non significa delete", while the action deletes the vault and its accounts from the device. The description under it: "The vault stays on GitHub". The behaviour did not change. Added in the code, **proposed**: it also
 deletes the file of this device from `computers/` on GitHub (5.1), so a device **offline cannot unlink**;
 the author was not asked about this.)
 
@@ -299,7 +299,7 @@ Settings                                Settings
 
   1  Sync with GitHub                   Synced with GitHub: genlupo/picoauth-vault
   2  Delete this vault
-                                          1  Unlink this device
+                                          1  Reset this device
                                           2  Linked devices
 ```
 
@@ -308,7 +308,7 @@ from this computer the vault file, `sync.json`, and from the keychain the master
 key and the GitHub access; Pico Auth then shows the first-start menu. The vault on GitHub is not
 touched.
 
-**Decided (2026-11-14): Linked devices** (labels "Linked devices" and "Unlink this device", chosen by the author over "computers").
+**Decided (2026-11-14): Linked devices** (labels "Linked devices" and "Unlink this device", chosen by the author over "computers"; "Unlink this device" became "Reset this device", see section 5).
 **Decided (2026-11-14): "device" everywhere.** Every text of Pico Auth says "device", never "computer":
 screens, messages and the commit messages on GitHub (for example "Pico Auth: opened on a device").
 Written. Not changed, because they are not texts the user reads in the app: the names in the code, the
@@ -541,7 +541,7 @@ All in `cmd/picoauth` (Go, Fyne GUI through `picotools/internal/gui`):
 - `save.go`: section 7. Every change goes through `apply` (local only, or uploaded first when linked),
   conflicts, offline, and `checkRemote`, the 10-second check (newer vault, requests, device file).
 - `computers.go`: the devices list of 5.1 (`computers/<id>.json`, since and last).
-- `forget.go`: delete this vault and unlink this device.
+- `forget.go`: delete this vault and reset this device (unlink).
 - `model.go` / `render.go`: screens and keys. First start `screenStart` with two pages (section 4).
   Keys of the list: `n` new, `m` rename, `d` delete, `s` settings, `enter`/`1-9` copy, `↑/↓`, `esc`/`q`.
 - `totp.go`, `form.go`, `main.go`: codes and `otpauth://`, question forms, window and 1-second tick.
