@@ -219,6 +219,8 @@ func (m *model) Rune(r rune) {
 			m.startPage = 1
 		case m.startPage == 1 && r == '1':
 			m.startJoin()
+		case m.startPage == 1 && r == '2':
+			m.startGlupoJoin()
 		}
 
 	case screenApprove:

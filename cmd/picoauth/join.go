@@ -44,6 +44,9 @@ func (m *model) join(v *syncView, repo string) {
 		_, _, err := m.rs.getFile(ctx, repo, vaultFile)
 		if errors.Is(err, errNotFound) {
 			err = errors.New(repo + " holds no vault: link first the device that has it (Settings › Sync with GitHub)")
+			if isGlupo(repo) {
+				err = errors.New("The account " + glupoUser(repo) + " holds no vault on glupo.dev: link first the device that has it (Settings › Sync with glupo.dev)")
+			}
 		}
 		var reqSHA string
 		if err == nil {
@@ -56,9 +59,14 @@ func (m *model) join(v *syncView, repo string) {
 		}
 		later(func() {
 			v.pair, v.msg = pairCode(pub), "Waiting for the approval…"
-			// Leaving now withdraws the request.
+			// Leaving now withdraws the request (with the background context: the view's one is
+			// cancelled by esc, before this runs).
 			v.onEsc = func() {
-				go m.rs.deleteFile(ctx, repo, requestPath(id), reqSHA, "Pico Auth: request withdrawn")
+				bg := m.background
+				go func() {
+					m.rs.deleteFile(bg, repo, requestPath(id), reqSHA, "Pico Auth: request withdrawn")
+					m.leftJoin(bg, repo)
+				}()
 			}
 		})
 
@@ -80,6 +88,7 @@ func (m *model) join(v *syncView, repo string) {
 				continue // the network may come back
 			}
 			if _, _, err := m.rs.getFile(ctx, repo, requestPath(id)); errors.Is(err, errNotFound) {
+				m.leftJoin(ctx, repo)
 				later(func() {
 					v.onEsc = nil
 					m.startPage = 0
@@ -104,37 +113,64 @@ func (m *model) join(v *syncView, repo string) {
 				return
 			}
 			v.pair, v.msg = "", ""
+			if v.password != "" {
+				// glupo.dev: the master password was typed before the login; it opens the vault.
+				if msg := m.finishJoin(repo, raw, sha, second, v.password); msg == "" {
+					return
+				}
+			}
 			m.askJoinPassword(repo, raw, sha, second)
 		})
 	}()
 }
 
+// leftJoin forgets the glupo.dev access of a new device that did not get in (refused, expired, or
+// esc): its token is revoked on the server and removed from the keychain. Nothing to do on GitHub.
+// It runs outside the user interface.
+func (m *model) leftJoin(ctx context.Context, repo string) {
+	if isGlupo(repo) {
+		m.gl.logout(ctx)
+		m.gl.forget()
+	}
+}
+
 // askJoinPassword asks the master password once, opens the vault and keeps everything here.
 func (m *model) askJoinPassword(repo string, raw []byte, sha string, second []byte) {
 	m.screen = screenStart
-	m.ask("Open the vault from GitHub", []question{{label: "Master password", secret: true}}, func(a []string) string {
-		v, err := decryptVault(raw, m.path, a[0], second)
-		if errors.Is(err, errWrongPassword) {
-			return "Wrong password"
-		}
-		if err == nil {
-			err = writeFile(m.path, raw)
-		}
-		if err == nil {
-			err = errors.Join(saveSecond(second), savePassword(a[0]))
-		}
-		l := &linkState{Repo: repo, SHA: sha}
-		if err == nil {
-			err = l.save(m.path)
-		}
-		if err != nil {
-			return capitalize(err.Error())
-		}
-		m.vault, m.link, m.screen = v, l, screenList
-		m.register()
-		m.say("This device is now linked to " + repo)
-		return ""
+	m.ask("Open the vault from "+where(repo), []question{{label: "Master password", secret: true}}, func(a []string) string {
+		return m.finishJoin(repo, raw, sha, second, a[0])
 	})
+}
+
+// finishJoin opens the vault with the master password and keeps everything here; it gives the
+// message of what went wrong, or "".
+func (m *model) finishJoin(repo string, raw []byte, sha string, second []byte, password string) string {
+	v, err := decryptVault(raw, m.path, password, second)
+	if errors.Is(err, errWrongPassword) {
+		return "Wrong password"
+	}
+	if err == nil {
+		err = writeFile(m.path, raw)
+	}
+	if err == nil {
+		err = errors.Join(saveSecond(second), savePassword(password))
+	}
+	l := &linkState{Repo: repo, SHA: sha}
+	if err == nil {
+		err = l.save(m.path)
+	}
+	if err != nil {
+		return capitalize(err.Error())
+	}
+	m.vault, m.link, m.screen = v, l, screenList
+	m.glupoCreds()
+	m.register()
+	if isGlupo(repo) {
+		m.say("This device is now linked to glupo.dev, account " + glupoUser(repo))
+	} else {
+		m.say("This device is now linked to " + repo)
+	}
+	return ""
 }
 
 // ---- On a linked computer ----

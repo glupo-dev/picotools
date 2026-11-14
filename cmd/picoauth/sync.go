@@ -58,13 +58,16 @@ type syncView struct {
 	next   func(repo string) // what to do once the repository is known; runs in the user interface
 	onEsc  func()            // run when the user leaves while it works
 	pair   string            // the 6-digit code of a request for a new computer
-	note   string            // why this screen is here, when it is not obvious
-	code   string            // the login code to type on GitHub, while waiting for it
-	url    string            // where to type it
-	msg    string            // what Pico Auth is doing now
-	repos  []string          // the repositories to choose from, when there is more than one
-	err    string
-	done   string
+	// password is the master password typed before the approval (glupo.dev: the login needs it);
+	// "" with GitHub, where it is asked once the second key arrived.
+	password string
+	note     string   // why this screen is here, when it is not obvious
+	code     string   // the login code to type on GitHub, while waiting for it
+	url      string   // where to type it
+	msg      string   // what Pico Auth is doing now
+	repos    []string // the repositories to choose from, when there is more than one
+	err      string
+	done     string
 }
 
 func (v *syncView) busy() bool { return v.err == "" && v.done == "" && v.repos == nil }

@@ -191,10 +191,11 @@ func (g *glupo) relogin(ctx context.Context) error {
 }
 
 // forget deletes the token of this device from the keychain.
+// The keychain entry goes under the lock too: once the token reads "", it is gone from there.
 func (g *glupo) forget() {
 	g.mu.Lock()
+	defer g.mu.Unlock()
 	g.token, g.user, g.password = "", "", ""
-	g.mu.Unlock()
 	keyring.Delete(keyringService, keyringGlupo)
 }
 

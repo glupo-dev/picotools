@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zalando/go-keyring"
 )
@@ -39,6 +40,25 @@ func TestRealGlupoServer(t *testing.T) {
 	if sm.vault.Accounts[0].Name != "Renamed" {
 		t.Fatal(sm.text())
 	}
+
+	// A second device, approved by the first one.
+	pc := glupoPC(t, newFakeGlupo(t))
+	pc.gl.api = server
+	pc.Rune('2')
+	pc.Rune('2')
+	pc.typ(user)
+	pc.typ("master-pw")
+	pc.until(t, func() bool { return pc.screen == screenSync && pc.sync.pair != "" })
+	sm.lastCheck = time.Time{}
+	sm.tick()
+	sm.until(t, func() bool { return sm.screen == screenApprove })
+	sm.Rune('y')
+	sm.typ("master-pw")
+	pc.until(t, func() bool { return pc.screen == screenList })
+	if pc.vault == nil || pc.vault.Accounts[0].Name != "Renamed" {
+		t.Fatal(pc.text())
+	}
+	sm.until(t, func() bool { return sm.screen == screenList && !strings.Contains(sm.text(), "Approving") })
 
 	sm.Rune('s')
 	sm.Rune('1')

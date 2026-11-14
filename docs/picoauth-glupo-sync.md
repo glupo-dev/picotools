@@ -11,9 +11,11 @@ and this document reuses them without repeating them.
   author's VPS. The author's Mac is linked to it as `gennaro` (a test vault).
 - **Block 2 (keep aligned)** works through the code shared with GitHub (upload at every change,
   10-second check, conflicts, device list): tried by the author on one device only (a change, the device
-  list, the message without server); with two devices it needs block 3.
-- **Block 3 (add another device) is not written**: the first-start page "Open an existing vault" still
-  offers only "From GitHub". **This is the next step.**
+  list, the message without server).
+- **Block 3 (add another device) is written** (2026-11-14, section 6): tested with two devices against
+  the fake server and against the real server running on the Mac; **not tried by the author**, who has
+  no second device at hand now. **Next step: the author tries it** (a second Pico Auth on the Mac, or the
+  work PC), which also tries block 2 with two devices.
 - Code: `cmd/picoauth` in picotools; the server is the separate project **picoauth-server**
   (`~/Projects/glupo-dev/picoauth-server`, private repository `glupo-dev/picoauth-server`). The code of
   both is pushed.
@@ -171,23 +173,34 @@ Behaviour once linked (**Proposed**, as built):
   connection to glupo.dev: nothing was changed." (`glupolink.go`); they do not use the author's
   "Cannot reach…" wording yet.
 
-## 6. Flow: add another device (block 3, next to write)
+## 6. Flow: add another device (block 3), as built
 
-**Proposed** (sketched, the author called the rest "dettagli"):
-1. First start → `2 Open an existing vault` → `From glupo.dev` (second page: `1 From GitHub`,
+**Proposed** (the author called it "dettagli" and said to go ahead with Claude's two proposals below,
+2026-11-14; not tried by the author yet):
+1. First start → `2 Open an existing vault` → `2 From glupo.dev` (second page: `1 From GitHub`,
    `2 From glupo.dev`; the page was kept with GitHub alone exactly so a source can be added,
    picoauth-sync.md 4).
-2. User name + master password. Pico Auth computes `login_hash`, logs in (`POST /login`), keeps the
-   token, downloads the vault and cannot open it (no `second_key`).
-3. The approval **exactly as with GitHub** (picoauth-sync.md, section 6): request with an X25519 public
-   key, 6-digit code compared on both screens, `y` + master password on a linked device, answer with
-   `second_key` encrypted, request and answer deleted. The server only relays a public key and an
-   encrypted blob. The shared code in `join.go` already goes through `remotes` (section 11).
-4. The master password typed at step 2 opens the vault and is kept in the keychain.
+2. A form: user name and **master password** (`glupolink.go`, `glupoJoinForm`). The password is asked
+   **before** the approval, because it is the login (with GitHub it is asked after the second key
+   arrives). Pico Auth computes `login_hash` and calls `POST /login`; the token goes in the keychain.
+   A wrong user name or password brings the form back, user name kept, with **one message for both**,
+   "Wrong user name or master password" (the server does not say which, on purpose). Without the
+   server: "Cannot reach glupo.dev: try again later."
+3. The rest is the GitHub code of `join.go`, through `remotes`: the vault must exist ("The account …
+   holds no vault on glupo.dev: link first the device that has it (Settings › Sync with glupo.dev)");
+   request with an X25519 public key, 6-digit code compared on both screens, `y` + master password on a
+   linked device, answer with `second_key` encrypted, request and answer deleted. The server only
+   relays a public key and an encrypted blob.
+4. The master password typed at step 2 opens the vault at once, without asking again, and goes in the
+   keychain; "This device is now linked to glupo.dev, account mario".
+5. If the request is refused, expires (15 minutes) or the user presses esc, the new device's token is
+   revoked on the server and removed from the keychain (`leftJoin`).
 
-Points to settle with the author when writing it: the master password is typed **before** the approval
-(with GitHub it is asked after), so a user who forgot it (the keychain always opens the app) finds out only
-there; whether a login that fails because of the password says so clearly.
+Fixed on the way, for GitHub too: esc while waiting did not withdraw the request (the delete was sent
+with the view's context, already cancelled by esc); it now uses the background context.
+
+A user who forgot the master password finds out at step 2: the login fails. Nothing else to do: the
+vault cannot be opened without it anyway.
 
 ## 7. Concerns and legal side
 
@@ -276,7 +289,9 @@ JSON; file content in base64; errors `{"error": "<code>"}` (`invalid_username`, 
 
 ## 10. Still open
 
-- **Block 3** (section 6), then block 2 tried for real with two devices.
+- **The author tries block 3** (section 6), and with it block 2 with two devices. Without a second
+  computer: a second Pico Auth on the Mac with its own data folder and keychain entries (not built; Docker
+  was asked about and is not practical for a desktop app with a keychain).
 - What happens on the server when the last device resets: account and vault kept or deleted (the
   "orphan vault", also open for GitHub, picoauth-sync.md 8). Today they stay, and there is no way out
   in the app: a new link to that account is refused ("already holds a vault") and "From glupo.dev"
@@ -323,9 +338,10 @@ JSON; file content in base64; errors `{"error": "<code>"}` (`invalid_username`, 
 - `glupolink.go`: Settings › Sync with glupo.dev (section 5).
 - Messages name the service of the link (`where`).
 - Tests: `glupo_test.go` (a fake server in memory: link, wrong invite, change, token revoked, offline,
-  reset, link again after a failed upload), `glupo_real_test.go` (against a real server, skipped unless
-  `PICOAUTH_SERVER`, `PICOAUTH_TEST_INVITE`, `PICOAUTH_TEST_USER` are set; passed against the local
-  server). `go test -race ./cmd/picoauth`; `./build.sh` builds every app into `dist/`.
+  reset, link again after a failed upload; add a device, refuse it, no vault yet, esc withdraws),
+  `glupo_real_test.go` (link, change, a second device approved, reset, against a real server; skipped
+  unless `PICOAUTH_SERVER`, `PICOAUTH_TEST_INVITE`, `PICOAUTH_TEST_USER` are set; passed against the
+  server running on the Mac). `go test -race ./cmd/picoauth`; `./build.sh` builds every app into `dist/`.
 
 ### On the VPS `glupo` (done with the author, step by step)
 

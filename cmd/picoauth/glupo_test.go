@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/zalando/go-keyring"
 
@@ -351,5 +352,186 @@ func TestLinkToGlupoAgain(t *testing.T) {
 	other.until(t, func() bool { return other.screen == screenForm && other.form.err != "" })
 	if !strings.Contains(other.text(), "Invite code not valid") || other.link != nil {
 		t.Fatal(other.text())
+	}
+}
+
+// glupoMac is a Mac with one account, linked to glupo.dev as mario, back on the account list.
+func glupoMac(t *testing.T, f *fakeGlupo) *syncModel {
+	t.Helper()
+	mac := newGlupoModel(t, t.TempDir(), f)
+	mac.newVault("master-pw")
+	mac.withAccount()
+	mac.linkGlupo(t, "mario", "K7QM-3XPA")
+	mac.until(t, func() bool { return mac.screen == screenSync && !mac.sync.busy() })
+	if mac.sync.done == "" {
+		t.Fatal(mac.text())
+	}
+	mac.Key(gui.KeyEsc)
+	mac.Key(gui.KeyEsc)
+	mac.until(t, func() bool { return mac.link.Computer != "" })
+	if mac.screen != screenList {
+		t.Fatal(mac.text())
+	}
+	return mac
+}
+
+// glupoPC is a new device, with its own empty keychain, at the first start.
+func glupoPC(t *testing.T, f *fakeGlupo) *syncModel {
+	t.Helper()
+	keyring.MockInit() // the Mac keeps what it needs in memory
+	return newGlupoModel(t, t.TempDir(), f)
+}
+
+func TestAddDeviceFromGlupo(t *testing.T) {
+	keyring.MockInit()
+	f := newFakeGlupo(t, "K7QM3XPA")
+	mac := glupoMac(t, f)
+	macSecond := mac.vault.second
+	pc := glupoPC(t, f)
+
+	pc.Rune('2')
+	if !strings.Contains(pc.text(), "2  From glupo.dev") {
+		t.Fatal(pc.text())
+	}
+	pc.Rune('2')
+
+	// A wrong password: back on the form, with the user name kept.
+	pc.typ("Mario")
+	pc.typ("wrong-pw")
+	pc.until(t, func() bool { return pc.screen == screenForm && pc.form.err != "" })
+	if !strings.Contains(pc.text(), "Wrong user name or master password") {
+		t.Fatal(pc.text())
+	}
+	pc.Key(gui.KeyEnter) // keeps "mario"
+	pc.typ("master-pw")
+	pc.until(t, func() bool { return pc.screen == screenSync && pc.sync.pair != "" })
+	if f.count("mario/requests/") != 1 {
+		t.Fatal("no request on glupo.dev")
+	}
+
+	// The Mac sees the request with the same code and approves it.
+	mac.tick()
+	mac.until(t, func() bool { return mac.screen == screenApprove })
+	if mac.approving.code != pc.sync.pair {
+		t.Fatalf("%s %s", mac.approving.code, pc.sync.pair)
+	}
+	mac.Rune('y')
+	mac.typ("master-pw")
+	mac.until(t, func() bool { return strings.Contains(mac.text(), "Approved") })
+
+	// The PC opens the vault with the password typed at the login: no question.
+	pc.until(t, func() bool { return pc.screen == screenList })
+	if pc.vault == nil || len(pc.vault.Accounts) != 1 || pc.link.Repo != "glupo.dev/mario" {
+		t.Fatal(pc.text())
+	}
+	if !strings.Contains(pc.text(), "linked to glupo.dev, account mario") {
+		t.Fatal(pc.text())
+	}
+	if s, _ := savedSecond(); string(s) != string(macSecond) {
+		t.Fatal("the PC has not the same second key")
+	}
+	if p, _ := savedPassword(); p != "master-pw" {
+		t.Fatal("the master password is not in the keychain")
+	}
+	if f.count("mario/requests/")+f.count("mario/answers/") != 0 {
+		t.Fatal("request and answer not deleted")
+	}
+	pc.until(t, func() bool { return pc.link.Computer != "" })
+	if f.count("mario/computers/") != 2 {
+		t.Fatal("the PC is not in the list")
+	}
+
+	// A change on the PC reaches the Mac at its next check.
+	before := pc.link.SHA
+	pc.Rune('m')
+	pc.typ("From the PC")
+	pc.typ("")
+	pc.until(t, func() bool { return !pc.saving && pc.link.SHA != before })
+	mac.lastCheck = time.Time{}
+	mac.tick()
+	mac.until(t, func() bool { return mac.vault.Accounts[0].Name == "From the PC" })
+}
+
+func TestRefuseDeviceFromGlupo(t *testing.T) {
+	keyring.MockInit()
+	f := newFakeGlupo(t, "K7QM3XPA")
+	mac := glupoMac(t, f)
+	tokens := f.tokenCount()
+
+	pc := glupoPC(t, f)
+	pc.Rune('2')
+	pc.Rune('2')
+	pc.typ("mario")
+	pc.typ("master-pw")
+	pc.until(t, func() bool { return pc.screen == screenSync && pc.sync.pair != "" })
+	if f.tokenCount() != tokens+1 {
+		t.Fatal("no token for the PC")
+	}
+
+	mac.tick()
+	mac.until(t, func() bool { return mac.screen == screenApprove })
+	mac.Rune('n')
+	pc.until(t, func() bool { return pc.screen == screenStart })
+	if !strings.Contains(pc.text(), "Request refused or expired") || pc.vault != nil {
+		t.Fatal(pc.text())
+	}
+	// The PC's token is revoked and gone from its keychain.
+	if f.tokenCount() != tokens {
+		t.Fatalf("tokens %d, want %d", f.tokenCount(), tokens)
+	}
+	if tok, _ := keyring.Get(keyringService, keyringGlupo); tok != "" {
+		t.Fatal("the token is still in the keychain")
+	}
+}
+
+func TestJoinGlupoWithoutVault(t *testing.T) {
+	keyring.MockInit()
+	f := newFakeGlupo(t, "K7QM3XPA")
+	// An account whose first link stopped before the upload.
+	f.failPut = 1
+	first := newGlupoModel(t, t.TempDir(), f)
+	first.newVault("master-pw")
+	first.linkGlupo(t, "mario", "K7QM-3XPA")
+	first.until(t, func() bool { return first.screen == screenSync && !first.sync.busy() })
+
+	pc := glupoPC(t, f)
+	pc.Rune('2')
+	pc.Rune('2')
+	pc.typ("mario")
+	pc.typ("master-pw")
+	pc.until(t, func() bool { return pc.screen == screenSync && !pc.sync.busy() })
+	if !strings.Contains(pc.sync.err, "holds no vault on glupo.dev") || f.count("mario/requests/") != 0 {
+		t.Fatal(pc.text())
+	}
+}
+
+// Esc while waiting withdraws the request (it used to be sent with an already cancelled context).
+func TestWithdrawRequestFromGlupo(t *testing.T) {
+	keyring.MockInit()
+	f := newFakeGlupo(t, "K7QM3XPA")
+	glupoMac(t, f)
+	tokens := f.tokenCount()
+	pc := glupoPC(t, f)
+	pc.Rune('2')
+	pc.Rune('2')
+	pc.typ("mario")
+	pc.typ("master-pw")
+	pc.until(t, func() bool { return pc.screen == screenSync && pc.sync.pair != "" })
+	pc.Key(gui.KeyEsc)
+	deadline := time.Now().Add(5 * time.Second)
+	gone := func() bool {
+		pc.gl.mu.Lock()
+		forgotten := pc.gl.token == ""
+		pc.gl.mu.Unlock()
+		return f.count("mario/requests/") == 0 && f.tokenCount() == tokens && forgotten
+	}
+	for !gone() && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !gone() {
+		t.Fatalf("requests %d, tokens %d (want %d)", f.count("mario/requests/"), f.tokenCount(), tokens)
+	}
+	if tok, _ := keyring.Get(keyringService, keyringGlupo); tok != "" {
+		t.Fatal("the token is still in the keychain")
 	}
 }

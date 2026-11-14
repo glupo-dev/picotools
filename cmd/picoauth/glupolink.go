@@ -126,3 +126,53 @@ func (m *model) glupoUpload(v *syncView, user string) {
 		})
 	}()
 }
+
+// ---- Open an existing vault › From glupo.dev (docs/picoauth-glupo-sync.md, section 6) ----
+
+const glupoJoinTitle = "Open an existing vault › From glupo.dev"
+
+func (m *model) startGlupoJoin() { m.glupoJoinForm("", "") }
+
+// glupoJoinForm asks user name and master password: on glupo.dev the master password is also the
+// login, so it is typed before the approval (with GitHub it is asked after).
+func (m *model) glupoJoinForm(user, msg string) {
+	m.screen, m.startPage = screenStart, 1 // esc goes back to the second page
+	m.ask(glupoJoinTitle, []question{
+		{label: "User name", value: user},
+		{label: "Master password", secret: true},
+	}, func(a []string) string {
+		u, pw := normalUsername(a[0]), a[1]
+		if !usernameRe.MatchString(u) {
+			return capitalize(errBadUsername.Error())
+		}
+		m.glupoJoin(u, pw)
+		return ""
+	})
+	if msg != "" {
+		m.form.err = msg
+	}
+}
+
+// glupoJoin logs in with the master password, then goes on as with GitHub: the vault, a request,
+// the approval of a linked device, the second key.
+func (m *model) glupoJoin(user, password string) {
+	v := m.newSyncView(glupoJoinTitle, screenStart, "Logging in to glupo.dev…")
+	v.password = password
+	ctx, later := v.ctx, v.later
+	go func() {
+		err := m.gl.login(ctx, user, loginHash(user, password))
+		later(func() {
+			switch {
+			case err == nil:
+				m.gl.creds(user, password)
+				m.join(v, glupoPrefix+user)
+			case errors.Is(err, errWrongLogin):
+				m.glupoJoinForm(user, capitalize(errWrongLogin.Error()))
+			case offline(err):
+				v.err = "Cannot reach glupo.dev: try again later."
+			default:
+				v.err = capitalize(err.Error())
+			}
+		})
+	}()
+}

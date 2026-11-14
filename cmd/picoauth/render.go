@@ -61,6 +61,9 @@ func (m *model) renderStart() []line {
 			nil,
 			{gui.Plain("  "), gui.Strong("1", gui.Accent), gui.Plain("  From GitHub")},
 			{gui.Colored("     The vault is on GitHub and another device of yours is already linked to it.", gui.Muted)},
+			nil,
+			{gui.Plain("  "), gui.Strong("2", gui.Accent), gui.Plain("  From glupo.dev")},
+			{gui.Colored("     The vault is on glupo.dev and another device of yours is already linked to it.", gui.Muted)},
 		}, m.footer("number choose · esc back")...)
 	}
 	return append([]line{
