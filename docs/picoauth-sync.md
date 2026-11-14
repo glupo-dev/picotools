@@ -19,7 +19,7 @@ Not everything here was agreed: the status of each point is the label it carries
   and the app is installed on it (section 2.2).
 - Export and restore were removed from the code (section 8).
 - A **second sync through glupo.dev**, next to this one, is **in production** (first device; adding a
-  device not written yet): [picoauth-glupo-sync.md](picoauth-glupo-sync.md). The file operations of this
+  device written, not tried by the author yet): [picoauth-glupo-sync.md](picoauth-glupo-sync.md). The file operations of this
   document's code go through `remotes` (`glupo.go`), to GitHub or glupo.dev by the link.
 
 Each point is marked:

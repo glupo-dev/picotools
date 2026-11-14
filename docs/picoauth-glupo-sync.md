@@ -96,8 +96,8 @@ Each point is marked:
   **case A**, or link the empty vault at once and add accounts after, **case B**. Same result. In case B
   each added account needs a connection (a linked vault blocks changes offline, picoauth-sync.md, 7);
   in case A accounts can be added offline because the vault is not linked yet.
-- First start → `2 Open an existing vault` → `From glupo.dev` will be for a user who already has an
-  account and a vault on glupo.dev: a new device (section 6, not written yet).
+- First start → `2 Open an existing vault` → `2 From glupo.dev` is for a user who already has an
+  account and a vault on glupo.dev: a new device (section 6).
 
 ## 5. Flow: link the first device (sign-up), as built
 
@@ -169,9 +169,10 @@ Behaviour once linked (**Proposed**, as built):
   after this, nobody can open the vault on glupo.dev any more". It needs the server: offline it says
   "No connection to glupo.dev: nothing was changed. A device is reset only online." (text by Claude,
   not reviewed by the author)
-- Other texts written by Claude, not reviewed by the author: during the link, without the server, "No
-  connection to glupo.dev: nothing was changed." (`glupolink.go`); they do not use the author's
-  "Cannot reach…" wording yet.
+- Other texts written by Claude, not reviewed by the author, and not consistent with each other yet:
+  without the server, the link says "No connection to glupo.dev: nothing was changed." and adding a
+  device "Cannot reach glupo.dev: try again later." (`glupolink.go`); the reset text above. Only the
+  change text "Cannot reach glupo.dev: the change was not saved. Try again later." is the author's.
 
 ## 6. Flow: add another device (block 3), as built
 
@@ -289,9 +290,10 @@ JSON; file content in base64; errors `{"error": "<code>"}` (`invalid_username`, 
 
 ## 10. Still open
 
-- **The author tries block 3** (section 6), and with it block 2 with two devices. Without a second
-  computer: a second Pico Auth on the Mac with its own data folder and keychain entries (not built; Docker
-  was asked about and is not practical for a desktop app with a keychain).
+- **The author tries block 3** (section 6), and with it block 2 with two devices, when the work PC is
+  at hand. Without a second computer: a second Pico Auth on the Mac with its own data folder and keychain
+  entries; offered on 2026-11-14, the author answered "not now" (do not build it unless asked). Docker was
+  asked about and is not practical for a desktop app with a keychain.
 - What happens on the server when the last device resets: account and vault kept or deleted (the
   "orphan vault", also open for GitHub, picoauth-sync.md 8). Today they stay, and there is no way out
   in the app: a new link to that account is refused ("already holds a vault") and "From glupo.dev"
@@ -303,6 +305,15 @@ JSON; file content in base64; errors `{"error": "<code>"}` (`invalid_username`, 
 - To do before giving it to colleagues (section 7): privacy notice, AVV with Netcup, Impressum to check,
   server backups (PostgreSQL `picoauth`), the presentation page.
 - Changing the master password (it changes `login_hash` too).
+- **`picoauth revoke <username>` does not lock a device out**, found while checking this document, not
+  discussed with the author: it deletes the user's tokens, but every linked device logs in again by itself
+  with the master password in its keychain (section 5), so it only forces a new login. Cutting a device
+  off would need something else (for example refusing that device's login): to discuss.
+- Not discussed: `/check` and `/accounts` tell whether a user name exists (`username_taken`), and only
+  the login is rate limited; with invites and few users this was judged acceptable by Claude, not by the
+  author.
+- Two linked devices approving the same request at the same time: the second answer is refused by the
+  server (a write without version on an existing file is a conflict); not tested, same as on GitHub.
 - Labels of the new menus and messages: written by Claude, the author saw the Settings ones.
 - The GitHub test of picoauth-sync.md 13 (Windows PC) cannot be done as written any more: the Mac is no
   longer linked to GitHub (reset on 2026-11-14 to try glupo.dev, its vault was a test vault). The
@@ -335,7 +346,9 @@ JSON; file content in base64; errors `{"error": "<code>"}` (`invalid_username`, 
   glupo.dev by the "repository" of the link (`glupo.dev/<username>` → glupo.dev; a GitHub owner cannot
   contain a dot), so `save.go`, `join.go`, `computers.go`, `forget.go` work for both unchanged.
   (Claude had proposed a "storage interface"; `remotes` is how it was done.)
-- `glupolink.go`: Settings › Sync with glupo.dev (section 5).
+- `glupolink.go`: Settings › Sync with glupo.dev (section 5) and first start › Open an existing vault ›
+  From glupo.dev (section 6: `glupoJoinForm`, `glupoJoin`, then `join` in `join.go`; `leftJoin` there
+  forgets the token of a device that did not get in).
 - Messages name the service of the link (`where`).
 - Tests: `glupo_test.go` (a fake server in memory: link, wrong invite, change, token revoked, offline,
   reset, link again after a failed upload; add a device, refuse it, no vault yet, esc withdraws),
