@@ -379,6 +379,7 @@ func linkedMac(t *testing.T, f *fakeGitHub) *syncModel {
 	if mac.screen != screenList || mac.link == nil {
 		t.Fatal(mac.text())
 	}
+	mac.until(t, func() bool { return mac.link.Computer != "" })
 	return mac
 }
 
@@ -433,6 +434,10 @@ func TestAddComputer(t *testing.T) {
 	}
 	if f.count("genlupo/picoauth-vault/requests/")+f.count("genlupo/picoauth-vault/answers/") != 0 {
 		t.Fatal("request and answer not deleted")
+	}
+	pc.until(t, func() bool { return pc.link.Computer != "" })
+	if f.count("genlupo/picoauth-vault/computers/") != 2 {
+		t.Fatal("the PC is not in the list")
 	}
 
 	// Next start on the PC opens by itself.
@@ -631,6 +636,45 @@ func TestChangesArrive(t *testing.T) {
 	inSync(t, f, mac)
 }
 
+func TestLastUsed(t *testing.T) {
+	keyring.MockInit()
+	f := newFakeGitHub(t, "genlupo/picoauth-vault")
+	mac := linkedMac(t, f)
+	path := "genlupo/picoauth-vault/" + computerPath(mac.link.Computer)
+	lastUsed := func() time.Time {
+		var c computer
+		json.Unmarshal(f.file(path), &c)
+		return c.LastUsed
+	}
+	if !lastUsed().Equal(mac.at) {
+		t.Fatal("the link does not write the time")
+	}
+
+	// The next day Pico Auth is opened again, with no change: the time is written once.
+	next := newSyncModel(t, mac.path[:len(mac.path)-len("/picoauth/vault.picoauth")], f)
+	next.at = next.at.Add(24 * time.Hour)
+	opened := next.at
+	next.tick()
+	next.until(t, func() bool { return next.usedWritten })
+	if !lastUsed().Equal(opened) {
+		t.Fatalf("last used %v", lastUsed())
+	}
+	next.at = next.at.Add(time.Minute)
+	next.lastCheck = time.Time{}
+	next.tick()
+	next.until(t, func() bool { return !next.checking })
+	if !lastUsed().Equal(opened) {
+		t.Fatal("written again in the same opening")
+	}
+
+	next.Rune('s')
+	next.Rune('2')
+	next.until(t, func() bool { return !next.computers.loading })
+	if !strings.Contains(next.text(), "last today "+opened.Local().Format("15:04")) || !strings.Contains(next.text(), "since ") {
+		t.Fatal(next.text())
+	}
+}
+
 func TestOffline(t *testing.T) {
 	keyring.MockInit()
 	f := newFakeGitHub(t, "genlupo/picoauth-vault")
@@ -736,14 +780,51 @@ func TestUnlink(t *testing.T) {
 	f := newFakeGitHub(t, "genlupo/picoauth-vault")
 	mac := linkedMac(t, f)
 	up := f.file(vaultKey)
+	if f.count("genlupo/picoauth-vault/computers/") != 1 {
+		t.Fatal("the Mac is not in the list")
+	}
+
+	// The list of linked computers.
 	mac.Rune('s')
-	if !strings.Contains(mac.text(), "1  Unlink this computer") || strings.Contains(mac.text(), "Delete this vault") {
+	if !strings.Contains(mac.text(), "1  Unlink this device") || strings.Contains(mac.text(), "Delete this vault") {
 		t.Fatal(mac.text())
 	}
+	mac.Rune('2')
+	mac.until(t, func() bool { return !mac.computers.loading })
+	name := thisComputer(time.Now()).Name
+	if !strings.Contains(mac.text(), name) || !strings.Contains(mac.text(), "(this one)") {
+		t.Fatal(mac.text())
+	}
+	mac.Key(gui.KeyEsc)
+
+	// Without GitHub it cannot be unlinked.
+	api := mac.gh.api
+	mac.gh.api = "http://127.0.0.1:1"
 	mac.Rune('1')
+	mac.until(t, func() bool { return mac.status != nil && strings.Contains(mac.text(), "No connection") })
+	mac.gh.api = api
+
+	// The only linked computer: a clear warning.
+	mac.Rune('1')
+	mac.until(t, func() bool { return mac.screen == screenForm })
+	if !strings.Contains(mac.text(), "only linked device") {
+		t.Fatal(mac.text())
+	}
+	mac.Key(gui.KeyEsc)
+
+	// With another computer, the usual words.
+	f.mu.Lock()
+	f.files["genlupo/picoauth-vault/computers/pc.json"] = []byte(`{"name":"PC-UFFICIO","system":"Windows","since":"2026-11-20T09:00:00Z"}`)
+	f.mu.Unlock()
+	mac.Rune('1')
+	mac.until(t, func() bool { return mac.screen == screenForm })
+	if strings.Contains(mac.text(), "only linked device") {
+		t.Fatal(mac.text())
+	}
 	mac.typ("delete")
 	mac.typ("master-pw")
-	if mac.screen != screenStart || !strings.Contains(mac.text(), "unlinked") {
+	mac.until(t, func() bool { return mac.screen == screenStart })
+	if !strings.Contains(mac.text(), "unlinked") {
 		t.Fatal(mac.text())
 	}
 	for _, p := range []string{mac.path, linkPath(mac.path)} {
@@ -759,6 +840,9 @@ func TestUnlink(t *testing.T) {
 	}
 	if string(f.file(vaultKey)) != string(up) {
 		t.Fatal("the vault on GitHub changed")
+	}
+	if f.count("genlupo/picoauth-vault/computers/") != 1 || f.file("genlupo/picoauth-vault/computers/pc.json") == nil {
+		t.Fatal("the list on GitHub is wrong")
 	}
 	// No more checks of the repository.
 	mac.lastCheck = time.Time{}

@@ -131,6 +131,7 @@ func (m *model) askJoinPassword(repo string, raw []byte, sha string, second []by
 			return capitalize(err.Error())
 		}
 		m.vault, m.link, m.screen = v, l, screenList
+		m.register()
 		m.say("This computer is now linked to " + repo)
 		return ""
 	})

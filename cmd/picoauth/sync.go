@@ -21,6 +21,8 @@ import (
 type linkState struct {
 	Repo string `json:"repo"` // owner/name
 	SHA  string `json:"sha"`
+	// Computer is the id of this computer's file in computers/, "" until it is written.
+	Computer string `json:"computer,omitempty"`
 }
 
 func linkPath(vault string) string { return filepath.Join(filepath.Dir(vault), "sync.json") }
@@ -79,6 +81,8 @@ func (m *model) settingsRune(r rune) {
 		m.deleteVaultForm()
 	case m.link != nil && r == '1':
 		m.unlinkForm()
+	case m.link != nil && r == '2':
+		m.openComputers()
 	}
 }
 
@@ -231,6 +235,7 @@ func (m *model) linked(v *syncView, repo, sha string, second, data []byte, err e
 		return
 	}
 	m.link = l
+	m.register()
 	v.msg, v.done = "", "This vault is now on GitHub, in "+repo
 }
 
@@ -274,14 +279,18 @@ func (m *model) renderSettings() []line {
 		lines = append(lines,
 			line{gui.Plain("Synced with GitHub: "), gui.Strong(m.link.Repo, gui.ValueFg)},
 			nil,
-			line{gui.Plain("  "), gui.Strong("1", gui.Accent), gui.Plain("  Unlink this computer")},
-			line{gui.Colored("     Remove the vault from this computer only: it stays on GitHub and on your other computers.", gui.Muted)},
+			line{gui.Plain("  "), gui.Strong("1", gui.Accent), gui.Plain("  Unlink this device")},
+			line{gui.Colored("     Remove the vault from this device only: it stays on GitHub and on your other devices.", gui.Muted)},
+			nil,
+			line{gui.Plain("  "), gui.Strong("2", gui.Accent), gui.Plain("  Linked devices")},
+			line{gui.Colored("     The devices that have this vault.", gui.Muted)},
 		)
 		return append(lines, m.footer("number choose · esc back")...)
 	}
 	lines = append(lines,
 		line{gui.Plain("  "), gui.Strong("1", gui.Accent), gui.Plain("  Sync with GitHub")},
 		line{gui.Colored("     Put this vault in a private GitHub repository of yours, to have it on your other computers.", gui.Muted)},
+		nil,
 		line{gui.Plain("  "), gui.Strong("2", gui.Accent), gui.Plain("  Delete this vault")},
 		line{gui.Colored("     Delete the vault and its accounts from this computer, to start again.", gui.Muted)},
 	)

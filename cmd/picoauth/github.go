@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/zalando/go-keyring"
@@ -49,7 +50,9 @@ type github struct {
 	api    string // https://api.github.com
 	client *http.Client
 	now    func() time.Time
-	token  *ghToken
+
+	mu    sync.Mutex // the calls run in several goroutines: one renews the access at a time
+	token *ghToken
 }
 
 func newGitHub() *github {
@@ -150,6 +153,12 @@ func (g *github) waitLogin(ctx context.Context, d *deviceCode) error {
 
 // keep turns a token answer into the access, and keeps it in the keychain.
 func (g *github) keep(t tokenAnswer) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.keepLocked(t)
+}
+
+func (g *github) keepLocked(t tokenAnswer) error {
 	if t.AccessToken == "" {
 		return errors.New("GitHub did not give an access")
 	}
@@ -168,6 +177,8 @@ func (g *github) keep(t tokenAnswer) error {
 // access is a valid access, renewed with the refresh token if it expired.
 // errLoginNeeded means the browser login must be done (again).
 func (g *github) access(ctx context.Context) (string, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	if g.token == nil {
 		tok, err := savedToken()
 		if err != nil {
@@ -198,10 +209,18 @@ func (g *github) access(ctx context.Context) (string, error) {
 	if a.Error != "" {
 		return "", errLoginNeeded // refresh token refused or expired: log in again
 	}
-	if err := g.keep(a); err != nil {
+	if err := g.keepLocked(a); err != nil {
 		return "", err
 	}
 	return g.token.Access, nil
+}
+
+// forget drops the access, here and in the keychain.
+func (g *github) forget() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.token = nil
+	deleteToken()
 }
 
 // ---- API calls ----
@@ -234,8 +253,7 @@ func (g *github) call(ctx context.Context, method, path string, body, out any) (
 	defer resp.Body.Close()
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized:
-		g.token = nil
-		deleteToken()
+		g.forget()
 		return resp.StatusCode, errLoginNeeded
 	case resp.StatusCode >= 300:
 		return resp.StatusCode, nil

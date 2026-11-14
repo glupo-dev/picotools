@@ -158,6 +158,8 @@ func (m *model) checkRemote() {
 	if m.link == nil || m.vault == nil || m.vault.second == nil || m.checking || m.saving || m.screen != screenList {
 		return
 	}
+	m.register()
+	m.markUsed()
 	m.checking = true
 	repo, sha, ctx, now := m.link.Repo, m.link.SHA, m.background, m.now()
 	go func() {

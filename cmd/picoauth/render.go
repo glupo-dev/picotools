@@ -34,6 +34,8 @@ func (m *model) Render(cols, rows int) []line {
 		lines = append(lines, m.renderSync()...)
 	case screenApprove:
 		lines = append(lines, m.renderApprove()...)
+	case screenComputers:
+		lines = append(lines, m.renderComputers()...)
 	case screenFatal:
 		if m.fatal != "" {
 			lines = append(lines, line{gui.Strong("✘ "+m.fatal, gui.Red)}, nil)

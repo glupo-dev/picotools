@@ -15,15 +15,16 @@ import (
 type screen int
 
 const (
-	screenStart    screen = iota // first start: new vault
-	screenList                   // the accounts with their codes
-	screenForm                   // questions, one after the other
-	screenConfirm                // a yes/no question
-	screenPreview                // a new account with its code, before saving it
-	screenSettings               // the rare operations on the whole vault
-	screenSync                   // linking the vault to GitHub, while it works
-	screenApprove                // a new computer asks for access
-	screenFatal                  // something went wrong at start: only esc
+	screenStart     screen = iota // first start: new vault
+	screenList                    // the accounts with their codes
+	screenForm                    // questions, one after the other
+	screenConfirm                 // a yes/no question
+	screenPreview                 // a new account with its code, before saving it
+	screenSettings                // the rare operations on the whole vault
+	screenSync                    // linking the vault to GitHub, while it works
+	screenApprove                 // a new computer asks for access
+	screenComputers               // the linked computers
+	screenFatal                   // something went wrong at start: only esc
 )
 
 // How long a copied code stays in the clipboard.
@@ -38,15 +39,19 @@ type model struct {
 	gh    *github
 	sync  *syncView
 
-	startPage  int // first start: 0 the main menu, 1 open an existing vault
-	checkEvery time.Duration
-	lastCheck  time.Time
-	checking   bool            // reading the repository
-	saving     bool            // a change is being uploaded
-	handled    map[string]bool // requests already approved or refused
-	approving  *pendingRequest // the request on screen
-	background context.Context // for the checks that run while Pico Auth is open
-	screen     screen
+	startPage   int // first start: 0 the main menu, 1 open an existing vault
+	checkEvery  time.Duration
+	lastCheck   time.Time
+	checking    bool // reading the repository
+	saving      bool // a change is being uploaded
+	registering bool // writing the file of this computer in computers/
+	usedWritten bool // the time of this opening is in the file of this computer
+	markingUsed bool
+	computers   *computersView
+	handled     map[string]bool // requests already approved or refused
+	approving   *pendingRequest // the request on screen
+	background  context.Context // for the checks that run while Pico Auth is open
+	screen      screen
 
 	cursor int // selected account
 
@@ -184,6 +189,11 @@ func (m *model) Key(k string) {
 
 	case screenSync:
 		m.syncKey(k)
+
+	case screenComputers:
+		if k == gui.KeyEsc {
+			m.screen = screenSettings
+		}
 
 	case screenConfirm, screenPreview:
 		m.screen = m.after // any key other than y is no

@@ -241,7 +241,8 @@ Settings                                Settings
 
   1  Sync with GitHub                   Synced with GitHub: genlupo/picoauth-vault
   2  Delete this vault
-                                          1  Unlink this computer
+                                          1  Unlink this device
+                                          2  Linked devices
 ```
 
 Both ask to type `delete` and the master password (the rules above). Written in block 4: both remove
@@ -278,6 +279,31 @@ in front of the user. A linked computer holds the **local copy** of the vault an
 The vault on GitHub and the other computers do not change. Afterwards the computer is like new: at the
 next start Pico Auth shows the first-start menu (section 4). So a linked computer can also get rid of
 its vault: by unlinking.
+
+**Decided (2026-11-14): Linked devices** (labels "Linked devices" and "Unlink this device", chosen by the author over "computers"). Settings shows the list of the computers linked to the
+vault (name, system, since when), view only, like the devices page of Netflix but **without removing a
+computer from another one**: each computer is unlinked only from itself. Why the list: the author knows
+which computers have the vault (a name they do not know is an alarm), and Pico Auth knows when the
+**last** computer is being unlinked, which was the reason: an "is this the only computer?" warning asks
+the user something they may not know. Removing another computer was explained and left out: without
+a server, a computer already has its copy and the second key; for one still in the user's hands it
+would be possible, for a stolen one it would not help (see below).
+
+Written (2026-11-14), the details **proposed**: each linked computer writes `computers/<id>.json`
+(name from the network name of the computer, system, date) after the link or the approval; a computer
+linked before the list existed writes it at its next start. Unlink reads the list first: if this is
+the only computer, the confirmation says "This is the only linked computer: after this, nobody can open
+the vault on GitHub any more" (a warning, not a block). Unlink deletes the file of this computer, so it
+**needs GitHub**, like every change of a linked vault: without a connection nothing is changed.
+
+**Decided (2026-11-14) by the author: "since" and "last".** Each device in the list shows
+`since 14 Nov 2026   last today 16:52`: **since** is the day it was linked, **last** the last time
+Pico Auth was **opened** on it, even only to copy a code, with no change. Each device writes the time in
+its `computers/<id>.json` once at each opening (each write is a commit; at every 10-second check it
+would be 360 commits an hour). A limit of once an hour was suggested and dropped by the author: one
+commit per opening is little. If Pico Auth stays open for days, "last" is when it was opened. A
+"last sync" (last change sent or received) was written first and replaced: the author wants to know
+when a device used the program.
 
 The case of a computer **no longer in the user's hands** (lost, stolen, already given back) is rare
 and, as the author decided, **not handled for now**: there the four things stay on that computer.
@@ -521,4 +547,5 @@ try in the app:
    blocked, conflicts. **Written 2026-11-14, to try.** On the Mac alone the author can try the upload
    (a commit "Pico Auth: vault changed" at every change) and the block without connection; changes
    arriving from another computer need the PC.
-4. **Delete and unlink** (section 5). **Written 2026-11-14, to try.**
+4. **Delete and unlink** (section 5). **Written 2026-11-14, to try.** Then the list of linked computers
+   (section 5), written 2026-11-14.
