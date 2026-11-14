@@ -1,18 +1,20 @@
 # Pico Auth: sync between computers
 
 How the same Pico Auth vault is kept on several computers (for example a Mac at home and a
-Windows PC at work). This is the full design discussed with the author on 2026-11-13, with the
+Windows PC at work). This is the full design discussed with the author on 2026-11-13 and 2026-11-14, with the
 reasons behind each choice, so that work can continue from here without the original discussion.
 Not everything here was agreed: the status of each point is the label it carries.
 
-**Block 1 is written and tried (2026-11-14): link the first computer** (section 5). **Block 2 is written,
-to try: add another computer** (section 6). **Block 3 is written, to try: keep them aligned** (section 7). **Block 4 is written: delete and unlink**
-(section 5). Section 13 lists the blocks.
-On GitHub everything is ready (2026-11-14): the GitHub App is registered
-(section 2.1), the author's repository is created and the app is installed on it (section 2.2).
-Today Pico Auth keeps the vault on one computer only
-(`picoauth/vault.picoauth` in the app settings folder). Export and restore were removed from the code on
-2026-11-14 (section 8).
+**State on 2026-11-14: the whole sync is written** (code in `cmd/picoauth`, section 11), in four blocks
+(section 13); the code is pushed to `main`.
+- Block 1, link the first computer: **tried by the author** with the real GitHub. The author's Mac is
+  linked: its vault is in `genlupo/picoauth-vault`.
+- Blocks 2 (add another computer), 3 (keep them aligned) and 4 (delete, unlink, linked devices): tested
+  only against a fake GitHub in the tests. **Not tried for real**: the author will try them **all
+  together** when the Windows PC of work is at hand (the test list is in section 13).
+- On GitHub everything is ready: the GitHub App is registered (section 2.1), the repository is created
+  and the app is installed on it (section 2.2).
+- Export and restore were removed from the code (section 8).
 
 Each point is marked:
 - **Decided**: agreed with the author.
@@ -122,7 +124,7 @@ the homepage link and the permissions. It shows nothing about who installed it o
 1. Create a **private** repository, for example `picoauth-vault`.
 2. On the app page click **Install** → **Only select repositories** → that repository.
    "Install" here means giving the app access to that repository: nothing is installed on a computer.
-   Pico Auth can show or open the link of the app page.
+   Pico Auth names the app page when it can reach no repository (written).
 
 **Done by the author on 2026-11-14:**
 - Repository **`genlupo/picoauth-vault`**, in the personal account genlupo (the author's choice: the
@@ -144,16 +146,18 @@ the homepage link and the permissions. It shows nothing about who installed it o
 
 1. In Pico Auth the user chooses to link GitHub.
 2. Pico Auth shows a short code (like `ABCD-1234`) and opens `github.com/login/device` in the browser.
+   **Enter copies the code** to paste it on GitHub (asked by the author after the first try, when they
+   had to select it with the mouse).
 3. The user logs in to GitHub as usual (password and GitHub two-factor), types the code and clicks **Authorize**.
 4. GitHub gives Pico Auth an access valid only on the repositories where the app is installed.
    Pico Auth keeps it in the system keychain (Keychain on Mac, Credential Manager on Windows).
 
-- Fact (from GitHub, not a choice), to handle when building: GitHub App user access normally expires after about 8 hours and is
+- Fact (from GitHub, not a choice), written in `github.go`: GitHub App user access normally expires after about 8 hours and is
   renewed by Pico Auth with a refresh token, without the user. Only if the refresh token also expires
   (months) the browser login is asked again.
 
-- **Proposed.** Pico Auth finds the repository by itself, asking GitHub where the app is installed.
-  If it is installed on more than one repository, it asks which one to use.
+- **Proposed, and written.** Pico Auth finds the repository by itself, asking GitHub where the app is
+  installed. If it is installed on more than one repository, it asks which one to use.
 
 ---
 
@@ -222,33 +226,8 @@ The author's case: the Mac already has a vault with its accounts, and the reposi
 
 Before: the repository exists and the app is installed on it (2.2).
 
-1. The user starts the link from the **Settings** page (below): key `s` in the account list → Settings → link to GitHub.
-
-**Decided (2026-11-14): the Settings page.** Pico Auth has no home page: it opens on the account list,
-because it is almost always opened to copy a code. The keys of that list (copy, new, rename, delete) are
-everyday actions on one account; linking to GitHub is a rare action on the whole vault and must not sit
-next to them. So the list has **one key, `s`, that opens a separate page, Settings**, with the rare
-administration operations, among them the link to GitHub. The name: "Vault" was proposed and rejected by
-the author, because 99% of people do not know what a vault is; "Settings" is the name people look for
-when they want to change something of the app.
-
-**Decided (2026-11-14): content of Settings.** `esc` goes back to the account list, which is the home of
-Pico Auth. Delete and unlink go in Settings too (decided 2026-11-14, with the labels below); one of
-the two is shown, depending on the link:
-
-```
-Settings                                Settings
-
-  1  Sync with GitHub                   Synced with GitHub: genlupo/picoauth-vault
-  2  Delete this vault
-                                          1  Unlink this device
-                                          2  Linked devices
-```
-
-Both ask to type `delete` and the master password (the rules above). Written in block 4: both remove
-from this computer the vault file, `sync.json`, and from the keychain the master password, the second
-key and the GitHub access; Pico Auth then shows the first-start menu. The vault on GitHub is not
-touched.
+1. The user starts the link from the **Settings** page (5.1): key `s` in the account list → Settings →
+   `1 Sync with GitHub`.
 2. Browser login (2.3).
 3. Pico Auth finds the repository and checks that it holds **no vault** (a README or other files do not count).
 4. It creates the second key and keeps it in the keychain.
@@ -275,10 +254,57 @@ in front of the user. A linked computer holds the **local copy** of the vault an
 1. asks confirmation by typing `delete` and the master password (as deleting a local vault above);
 2. deletes the local copy of the vault;
 3. deletes master password, second key and GitHub access from the keychain.
+(Written in block 4 as **Unlink this device**, in Settings. Added in the code, **proposed**: it also
+deletes the file of this device from `computers/` on GitHub (5.1), so a device **offline cannot unlink**;
+the author was not asked about this.)
 
 The vault on GitHub and the other computers do not change. Afterwards the computer is like new: at the
 next start Pico Auth shows the first-start menu (section 4). So a linked computer can also get rid of
 its vault: by unlinking.
+
+The case of a computer **no longer in the user's hands** (lost, stolen, already given back) is rare
+and, as the author decided, **not handled for now**: there the four things stay on that computer.
+
+**Removed from the open points (2026-11-14): "2 → From GitHub" on a repository with no vault.**
+It looked like a case to design, but it is not a real one. A user who wants sync starts it from
+Pico Auth on the computer that has the vault ("link to GitHub", this section): they create the
+repository and install the app (2.2; if the app reaches no repository, Pico Auth says so and names the
+app page), then Pico Auth logs in and uploads the vault at once. The
+repository is born inside the link, so the user cannot "forget" to upload the vault. It can only happen
+if the link breaks halfway (for example the connection drops before the upload): a plain error, where
+the computer with the vault says the link did not finish and must be done again; on another computer
+"From GitHub" just says that no vault was found.
+
+### 5.1 The Settings page
+
+**Decided (2026-11-14): the Settings page.** Pico Auth has no home page: it opens on the account list,
+because it is almost always opened to copy a code. The keys of that list (copy, new, rename, delete) are
+everyday actions on one account; linking to GitHub is a rare action on the whole vault and must not sit
+next to them. So the list has **one key, `s`, that opens a separate page, Settings**, with the rare
+administration operations, among them the link to GitHub. The name: "Vault" was proposed and rejected by
+the author, because 99% of people do not know what a vault is; "Settings" is the name people look for
+when they want to change something of the app.
+
+**Decided (2026-11-14): content of Settings.** `esc` goes back to the account list, which is the home of
+Pico Auth. Delete and unlink go in Settings too (decided 2026-11-14, with the labels below); one of
+the two is shown, depending on the link:
+
+Not linked (left) and linked (right); a blank line separates the items, each with a short grey
+description under it (the author asked for the blank line):
+
+```
+Settings                                Settings
+
+  1  Sync with GitHub                   Synced with GitHub: genlupo/picoauth-vault
+  2  Delete this vault
+                                          1  Unlink this device
+                                          2  Linked devices
+```
+
+Both ask to type `delete` and the master password (the rules in this section). Written in block 4: both remove
+from this computer the vault file, `sync.json`, and from the keychain the master password, the second
+key and the GitHub access; Pico Auth then shows the first-start menu. The vault on GitHub is not
+touched.
 
 **Decided (2026-11-14): Linked devices** (labels "Linked devices" and "Unlink this device", chosen by the author over "computers"). Settings shows the list of the computers linked to the
 vault (name, system, since when), view only, like the devices page of Netflix but **without removing a
@@ -287,35 +313,26 @@ which computers have the vault (a name they do not know is an alarm), and Pico A
 **last** computer is being unlinked, which was the reason: an "is this the only computer?" warning asks
 the user something they may not know. Removing another computer was explained and left out: without
 a server, a computer already has its copy and the second key; for one still in the user's hands it
-would be possible, for a stolen one it would not help (see below).
+would be possible, for a stolen one it would not help (the lost computer, above in section 5).
 
 Written (2026-11-14), the details **proposed**: each linked computer writes `computers/<id>.json`
-(name from the network name of the computer, system, date) after the link or the approval; a computer
-linked before the list existed writes it at its next start. Unlink reads the list first: if this is
-the only computer, the confirmation says "This is the only linked computer: after this, nobody can open
+(name, system, date) after the link or the approval; a computer linked before the list existed writes
+it at its next start. The name is the one the system gives (`os.Hostname`, without `.local`): on a Mac
+usually the Local hostname of Sharing, on Windows the device name. Unlink reads the list first: if this is
+the only device, the confirmation says "This is the only linked device: after this, nobody can open
 the vault on GitHub any more" (a warning, not a block). Unlink deletes the file of this computer, so it
 **needs GitHub**, like every change of a linked vault: without a connection nothing is changed.
 
 **Decided (2026-11-14) by the author: "since" and "last".** Each device in the list shows
 `since 14 Nov 2026   last today 16:52`: **since** is the day it was linked, **last** the last time
 Pico Auth was **opened** on it, even only to copy a code, with no change. Each device writes the time in
-its `computers/<id>.json` once at each opening (each write is a commit; at every 10-second check it
+its `computers/<id>.json` once at each opening (written: at the first check after opening, about a second
+after the account list appears; the check runs only with the account list on screen, so an opening that
+never shows the list writes nothing) (each write is a commit; at every 10-second check it
 would be 360 commits an hour). A limit of once an hour was suggested and dropped by the author: one
 commit per opening is little. If Pico Auth stays open for days, "last" is when it was opened. A
 "last sync" (last change sent or received) was written first and replaced: the author wants to know
 when a device used the program.
-
-The case of a computer **no longer in the user's hands** (lost, stolen, already given back) is rare
-and, as the author decided, **not handled for now**: there the four things stay on that computer.
-
-**Removed from the open points (2026-11-14): "2 → From GitHub" on a repository with no vault.**
-It looked like a case to design, but it is not a real one. A user who wants sync starts it from
-Pico Auth on the computer that has the vault ("link to GitHub", this section): Pico Auth guides them to
-create the repository and install the app (2.2), then logs in and uploads the vault at once. The
-repository is born inside the link, so the user cannot "forget" to upload the vault. It can only happen
-if the link breaks halfway (for example the connection drops before the upload): a plain error, where
-the computer with the vault says the link did not finish and must be done again; on another computer
-"From GitHub" just says that no vault was found.
 
 ---
 
@@ -335,13 +352,17 @@ which each Pico Auth reads when it opens and from time to time while it is open.
 1. First start → **2 Open an existing vault → From GitHub**.
 2. Browser login (2.3), with the user's GitHub account.
 3. Pico Auth downloads the vault but **cannot open it**: it has no second key.
-4. It creates its own key pair (the private part stays in its keychain) and writes in the repository
+4. It creates its own key pair (written: the private part stays **only in memory**, so closing Pico Auth
+   or pressing esc withdraws the request) and writes in the repository
    a **request**: a small file with its public key (**proposed**: for example `requests/<id>.json`).
 5. It shows a **6-digit code** computed from that public key, for example `482 913`,
-   and waits, checking the repository (**proposed**: about every 10 seconds, as in section 7).
+   and waits, checking the repository every 10 seconds (section 7). If no linked computer is open, it
+   keeps waiting; a linked computer that opens later deletes requests older than 15 minutes, and the
+   new computer then shows "Request refused or expired".
 
 ### On an already linked computer (any one, not only the Mac)
-6. When Pico Auth opens (or at its next check while open) it finds the request and shows:
+6. When Pico Auth opens (or at its next check while open, **only while the account list is on screen**,
+   not in the middle of a form or in Settings) it finds the request and shows:
    "A new computer asks for access, code 482 913. Approve?"
 7. The user checks that the code is **the same** as on the new computer's screen, presses `y` and
    types the **master password** (**decided 2026-11-14**).
@@ -372,7 +393,9 @@ which each Pico Auth reads when it opens and from time to time while it is open.
 
 - **Decided.** Pico Auth always works on the **local copy**: the codes are computed from it, also
   without internet.
-- **Decided.** When it opens, and from time to time while it is open (**proposed**: about every 10 seconds),
+- **Decided.** When it opens, and from time to time while it is open (**every 10 seconds**, confirmed by
+  the author on 2026-11-14 after asking if it was too often: it is one light call, about 360 an hour
+  while open, against the 5,000 an hour GitHub allows),
   it reads the repository: a newer vault (downloaded into the local copy) and requests from new computers
   (shown for approval). When Pico Auth is closed it reads nothing (explained to the author, no objection).
 - **Decided.** Every change (add, rename, delete an account) is saved locally and **uploaded at once**.
@@ -386,6 +409,10 @@ which each Pico Auth reads when it opens and from time to time while it is open.
   other" would happen more often). No queue of changes to keep on disk. If editing offline is ever
   really needed, "upload later" can be added without throwing anything away.
   Consequence: the change to retry after a conflict (below) is kept only in memory during the upload.
+  Confirmed again by the author on 2026-11-14: "no internet, no changes" is the price of a synced vault,
+  changes are rare, and the **codes always work** (also with no internet or GitHub down). Note told to
+  the author: the block happens whenever **GitHub** cannot be reached, so if the work network blocks
+  `api.github.com` changes would never work on the work PC: the try of block 2 on that PC will show it.
 
 **Decided** (explained and accepted). Conflicts, when two computers save at almost the same time:
 1. Pico Auth uploads saying to GitHub "I replace the version I read".
@@ -394,8 +421,10 @@ which each Pico Auth reads when it opens and from time to time while it is open.
    on it, and uploads.
 
 This works because changes are small and separate. The only ambiguous case is the same account changed
-on two computers (for example renamed on one and deleted on the other): **proposed**, the last operation
-wins (said to the author, not discussed).
+on two computers (for example renamed on one and deleted on the other). First **proposed** "the last
+operation wins"; the code **does differently: the delete wins** (the rename says "the account was deleted
+on another computer"), because accounts have no id and a deleted account cannot come back. Told to the
+author on 2026-11-14 ("tell me if you prefer the other"), no answer: still **proposed**.
 
 Two computers already linked share the same vault, password and second key: a conflict is solved by
 repeating one operation. This is different from section 5, where two independent vaults would meet.
@@ -426,6 +455,10 @@ Consequences (facts, said to the author):
   vault on GitHub cannot be opened (the second key was only on them): the accounts are lost and must be
   set up again site by site. Rare case, accepted.
 - A standalone vault cannot be moved to another computer, except by linking it to GitHub.
+- **Open, never discussed:** a vault left on GitHub with no linked device (all unlinked or all lost) is
+  an orphan: "From GitHub" would wait for ever (no one can approve), and the repository blocks a new
+  link (it already holds a vault). Today the only way out is by hand on github.com: delete
+  `vault.picoauth` (and `computers/`) from the repository, or use a new empty repository.
 
 ---
 
@@ -454,6 +487,18 @@ Sync and storage:
 - Merging a local vault with a vault already on GitHub, or asking the user whether to replace one of
   the two: a local vault goes only to a repository with no vault, "non si può fare, punto".
 
+Settings and linked devices:
+- The sync as a key in the account list next to copy/new/rename/delete: "sync non può stare lì" (5.1).
+- "Vault" as the name of the Settings page: 99% of people do not know the word.
+- A warning that **asks** "is this the only computer?" (the user may not know). Kept instead: the warning
+  "This is the only linked device…" that Pico Auth shows when it **knows** it from the devices list (5.1).
+- Removing (unlinking) a device from another one, as on Netflix: left out (5.1).
+- "last sync" in the list (last change sent or received): replaced by "last" = last opening.
+- Writing "last" at most once an hour: once per opening is fine.
+- The **IP address** of the last use: the local IP says nothing, the public IP needs an outside service
+  at each opening, against the README promise "Nothing goes to an online service you did not call
+  yourself". The author: "lascia stare".
+
 First start:
 - No first-start menu at all, with restore and GitHub as keys of the account list
   (`n` / `r` / `g`, or restore inside the Export screen `e`): the same menu with letters, and the empty
@@ -463,35 +508,55 @@ First start:
 
 ---
 
-## 11. Code today (what sync will change)
+## 11. The code
 
-All in `cmd/picoauth`:
-- `vault.go`: the vault file. A JSON envelope with the Argon2id parameters and salt, a nonce, and the
-  accounts encrypted with AES-256-GCM; the key comes from the master password only. The master password
-  is kept in the keychain (`go-keyring`, service `picoauth`). Sync needs the key to come from master
-  password + second key.
-- `model.go` / `render.go`: the screens. The first start is `screenStart` / `renderStart`
-  (today only `1 New vault`, to become the menu of section 4). The account list is `screenList`.
-- `totp.go`: the codes and the `otpauth://` parsing. Not touched by sync.
-- `form.go`: the question forms (copied from Pico API). `main.go`: window, clipboard, the 1-second tick.
-- Keys of the list today: `n` new, `m` rename, `d` delete (only when there are accounts),
-  `enter`/`1-9` copy a code, `↑/↓` move, `esc`/`q` quit. Sync adds `s` Settings (section 5).
-- Tests: `totp_test.go`, `vault_test.go`, `model_test.go`. `./build.sh` builds every app into `dist/`.
-
-Added by block 1 (section 13):
-- `github.go`: the GitHub client. Device Flow login, the access in the keychain (entry `github access`)
-  renewed with the refresh token, the repositories where the app is installed, read and write a file
+All in `cmd/picoauth` (Go, Fyne GUI through `picotools/internal/gui`):
+- `vault.go`: the vault file. A JSON envelope: Argon2id parameters and salt, nonce, accounts encrypted
+  with AES-256-GCM. Version 1: key from the master password only (a vault not linked). Version 2: key =
+  HKDF-SHA256 of the Argon2id key with the second key. Keychain (`go-keyring`, service `picoauth`):
+  entries `master password`, `second key`; `writeFile` writes through a temporary file.
+- `github.go`: the GitHub client. Device Flow login with Client ID `Iv23liUsuaDQViHcGo3m`, the access in
+  the keychain (entry `github access`) renewed with the refresh token (a lock, since calls run in several
+  goroutines), the repositories where the app is installed, list a folder, read / write / delete a file
   with its sha (a write refused because the file changed gives `errConflict`).
-- `sync.go`: the Settings page and the link flow of section 5, and `sync.json` next to the vault
-  (repository and sha of the last version uploaded).
-- `vault.go`: envelope version 2 and the second key (keychain entry `second key`).
-- `sync_test.go`: the link against a fake GitHub (no network).
+- `sync.go`: the Settings page, the shared connect step (login + find the repository), the link of
+  section 5, the new login when the access is refused (`relogin`), and `sync.json` next to the vault
+  (repository, sha of the last version, id of this device).
+- `pair.go`: requests and answers of section 6 (X25519, HKDF, AES-GCM), the 6-digit code.
+- `join.go`: the new computer of section 6 (From GitHub, request, wait, master password) and, on a linked
+  computer, the approval screen (`y` + master password, `n` refuses).
+- `save.go`: section 7. Every change goes through `apply` (local only, or uploaded first when linked),
+  conflicts, offline, and `checkRemote`, the 10-second check (newer vault, requests, device file).
+- `computers.go`: the devices list of 5.1 (`computers/<id>.json`, since and last).
+- `forget.go`: delete this vault and unlink this device.
+- `model.go` / `render.go`: screens and keys. First start `screenStart` with two pages (section 4).
+  Keys of the list: `n` new, `m` rename, `d` delete, `s` settings, `enter`/`1-9` copy, `↑/↓`, `esc`/`q`.
+- `totp.go`, `form.go`, `main.go`: codes and `otpauth://`, question forms, window and 1-second tick.
+- Tests: `totp_test.go`, `vault_test.go`, `model_test.go`, `sync_test.go` (all the sync against a fake
+  GitHub, no network; run with `go test -race ./cmd/picoauth`). `./build.sh` builds every app into `dist/`.
+
+On the computer, in the app settings folder (`~/Library/Application Support/picoauth/` on Mac,
+`%AppData%\picoauth\` on Windows): `vault.picoauth` (the local copy; on a linked computer the same bytes
+as on GitHub) and `sync.json` (only when linked).
+
+In the repository: `vault.picoauth` (root), `requests/<id>.json`, `answers/<id>.json` (only while a
+computer is being added), `computers/<id>.json` (one per linked device). Every write is a commit made as
+the user (for example "Pico Auth: vault changed", "Pico Auth: opened on a computer").
 
 ---
 
 ## 12. Still open
 
-- The **labels** of the first-start menu (section 4).
+- The **labels** of the first-start menu (section 4): written as `1 New vault`, `2 Open an existing
+  vault`, then `1 From GitHub`, provisional.
+- "computer" or "device" in the other texts: Settings says "device" (the author's choice); the link and
+  the approval still say "computer". Offered to the author to change them too, no answer yet.
+- The conflict case "renamed here, deleted elsewhere" (section 7): the delete wins in the code, to confirm.
+- The **presentation page** at `https://picoauth.glupo.dev` before giving Pico Auth to others (2.1, 9).
+- **Changing the master password**: there is no such function; with sync the other computers would
+  keep the old password in their keychain and must ask the new one. Never discussed.
+- The **orphan vault** (section 8): never discussed; the only way out today is by hand.
+- **Unlink needs GitHub** (section 5, 5.1): proposed and written, the author was not asked.
 
 Technical points never discussed with the author (to decide when building, do not present as decided):
 - **Proposed and written in block 3** (to confirm with the author):
@@ -514,6 +579,11 @@ Technical points never discussed with the author (to decide when building, do no
   means "needs the second key"; version 1 is a vault not linked. The vault is `vault.picoauth` at the
   root of the repository. The second key goes in the keychain **before** the upload, so a vault on
   GitHub always has its key somewhere; the local copy becomes version 2 only after the upload worked.
+- **Proposed and written for the linked devices** (5.1): name from the network name of the computer
+  (Mac: System Settings → General → Sharing → Local hostname, without `.local`; Windows: Settings →
+  System → About → Device name), written once, when the device file is created (after the link or the
+approval, or at the next start for a device linked before the list existed). Offered to the author: let the user type a
+  name at the link (a Windows name like `DESKTOP-4F7K2QX` says little); no answer yet.
 - **Proposed and written in block 2** (to confirm with the author): the request is
   `requests/<id>.json` (an X25519 public key and the time), the answer `answers/<id>.json` (the second
   key encrypted with AES-256-GCM, key from X25519 between a one-time key of the linked computer and the
@@ -524,10 +594,8 @@ Technical points never discussed with the author (to decide when building, do no
   computer deletes request and answer once it has the second key.
 - To check with the real GitHub: whether the access is renewed **without a client secret** (there is
   none, section 2.1). If GitHub refuses, Pico Auth asks the browser login again.
-- **Changing the master password**: today there is no such function; with sync the other computers
-  would keep the old password in their keychain and must ask the new one.
-- Old or unanswered requests: when they are deleted. Two linked computers approving the same request
-  at the same time. What the new computer does if no linked computer is open (wait, timeout).
+- Two linked computers approving the same request at the same time (both write an answer: the second
+  write is refused by GitHub; not tested).
 ---
 
 ## 13. Building it in blocks
@@ -547,5 +615,20 @@ try in the app:
    blocked, conflicts. **Written 2026-11-14, to try.** On the Mac alone the author can try the upload
    (a commit "Pico Auth: vault changed" at every change) and the block without connection; changes
    arriving from another computer need the PC.
-4. **Delete and unlink** (section 5). **Written 2026-11-14, to try.** Then the list of linked computers
-   (section 5), written 2026-11-14.
+4. **Delete and unlink** (section 5). **Written 2026-11-14, to try.** Then the list of linked devices
+   (5.1), written 2026-11-14.
+
+**Next step: the author tries blocks 2, 3 and 4 together** with the Windows PC
+(`dist/windows/picoauth.exe`), the Mac open on the account list:
+1. PC: first start → `2 Open an existing vault` → `1 From GitHub` → browser login (enter copies the code).
+2. PC shows a 6-digit code; Mac, within about 10 seconds, shows the request: same code → `y` + master
+   password. PC asks the master password once and shows the accounts. (Also try `n`: the PC shows
+   "Request refused or expired".)
+3. A change on one (add, rename, delete) appears on the other within about 10 seconds.
+4. With Wi-Fi off a change is refused with "No connection to GitHub", the codes still work.
+5. Settings → `2 Linked devices` shows both, with since and last.
+6. Unlink only **after** both are linked, and unlink the **PC**, not the Mac: the Mac is today the only
+   linked device, unlinking it would leave nobody able to open the vault on GitHub. To use the PC again
+   afterwards: "From GitHub" and the approval from the Mac again.
+Also to watch: whether the work network lets the PC reach `api.github.com`, and whether GitHub renews
+the access after about 8 hours without a client secret (if not, Pico Auth asks the browser login again).

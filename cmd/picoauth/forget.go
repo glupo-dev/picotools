@@ -13,7 +13,7 @@ import (
 // Both leave this computer like new: no vault, nothing of Pico Auth in the keychain, and at the
 // next start the first-start menu. The vault on GitHub and the other computers do not change.
 //   - Delete this vault: only for a vault not linked to GitHub; its accounts are lost.
-//   - Unlink this computer: for a linked computer; the vault stays on GitHub.
+//   - Unlink this device: for a linked computer; the vault stays on GitHub.
 // Both ask to type "delete" and the master password of the vault.
 
 func (m *model) deleteVaultForm() {
