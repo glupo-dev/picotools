@@ -383,5 +383,5 @@ picoauth-server/install.sh`.
 
 Mistakes met at the deploy, already fixed in the project: the socket URL form (above), and the wrapper
 starting in the home folder, which user `picoauth` cannot read (`.env` lookup): it now starts from `/`.
-The VPS infrastructure notes (`~/Projects/glupo-dev/netcup/CLAUDE.md`) do not list `vault.glupo.dev`
-yet: offered to the author, not done.
+The VPS infrastructure notes (`~/Projects/glupo-dev/netcup/CLAUDE.md`, "Stato attuale" and the activity log)
+list `vault.glupo.dev` since 2026-11-14.
