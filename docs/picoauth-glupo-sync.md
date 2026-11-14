@@ -6,7 +6,8 @@ Read [picoauth-sync.md](picoauth-sync.md) first: the vault, the second key, the 
 device with the 6-digit code, conflicts and the device list are designed there, and this document reuses
 them without repeating them.
 
-**State on 2026-11-14: block 1 written, not deployed** (link the first device, section 10, "Written"). The flow of the first
+**State on 2026-11-14: block 1 in production** at `https://vault.glupo.dev/picoauth` (link the first
+device, section 10, "Written" and "On the VPS"); the author's Mac is linked as `gennaro`. Blocks 2 and 3: section 10. The flow of the first
 device is defined (section 5); the server choices are in section 10; the rest are details (section 9).
 
 ## 10. Building: decisions of 2026-11-14
@@ -28,9 +29,16 @@ device (From glupo.dev, login, approval).
 - Data in **PostgreSQL** (already on the VPS for idp-rs), not files: account creation and "write only if
   the version is unchanged" must be all-or-nothing, which is a transaction / `UPDATE ... WHERE version`.
   The vault is a few KB in a `bytea` column.
-- Address: **`https://api.picoauth.glupo.dev`**, a name of its own (one Caddy block per service, the
-  service can move with one DNS record); `picoauth.glupo.dev` stays the presentation page.
-  `api.glupo.dev/picoauth` was proposed and dropped.
+- Address: **`https://vault.glupo.dev/picoauth`**. First decided `https://api.picoauth.glupo.dev` (a name
+  of its own per service; `api.glupo.dev/picoauth` was proposed and dropped). Changed at the deploy, by the
+  author: the Actalis certificate `*.glupo.dev` that the author paid for and uses for sso and schule
+  covers one level only, not `api.picoauth.glupo.dev`; Let's Encrypt for that name alone, or a second
+  Actalis certificate, were the alternatives. The author chose a one-level name; `picoauth-api`,
+  `picoauth-sync`, `pas`, `totp`, `sync`, `pico` were proposed and rejected ("una peggio dell'altra"),
+  **`vault`** chosen. Since a future **Pico Password** will have its vaults and APIs too, each app gets a
+  **path prefix** on the same name: `/picoauth/...` now, `/picopassword/...` one day (the author: "nulla ci
+  vieta di usare sempre vault.glupo.dev con degli endpoint diversi"). **No `v1/`** in the paths: few
+  users, and a `/picoauth/v2` can be added if ever needed. `picoauth.glupo.dev` stays the presentation page.
 - Invites: **a command on the server**, like the invites of idp-rs (`picoauth-server invite`); a web page
   only for the author was left out for now.
 
@@ -83,7 +91,7 @@ Each point is marked:
   while a device is added, one file per linked device (picoauth-sync.md, 5.1 and 6).
 - **Decided.** The user (example: "Mario") has an account on glupo.dev; glupo.dev knows which requests
   are Mario's and lets Mario read and write only that vault.
-- **Decided.** Pico Auth talks to an API on glupo.dev (for example under `api.glupo.dev`).
+- **Decided.** Pico Auth talks to an API on glupo.dev: `https://vault.glupo.dev/picoauth` (section 10).
 
 What exists on glupo.dev, **from the notes of other projects, not confirmed by the author in this chat**
 (the infrastructure is documented in `~/Projects/glupo-dev/netcup/CLAUDE.md`): a Netcup VPS `glupo`
@@ -273,7 +281,7 @@ author confirms:
 - Server side: language (Go like Pico Auth, or Rust like the author's other services `idp-rs`,
   `dashboard-rs`), which repository, vault in PostgreSQL or on disk.
 - Labels of the new menus and messages, and where `Sync with glupo.dev` goes in Settings (today:
-  `1 Sync with GitHub` / `2 Delete this vault`). The host name (`api.glupo.dev`) is an example.
+  `1 Sync with GitHub` / `2 Delete this vault`). 
 - Retry of a failed link: reuse the `second_key` already in the keychain or make a new one; what happens
   if only the device-file write fails.
 - New device: the master password is typed before the approval (with GitHub it is asked after); a user
@@ -288,8 +296,8 @@ also tests the parts shared with glupo.dev.
 
 ### Written (2026-11-14), block 1
 
-Tried only on the Mac, against a local PostgreSQL; **not deployed** on the VPS yet (DNS record, Caddy
-block, systemd service, PostgreSQL role: to do with the author).
+Tried first on the Mac against a local PostgreSQL (the author tried link, device list, a change, the
+message without server), then deployed on the VPS (below) and tried again for real.
 
 - **picoauth-server** (`~/Projects/glupo-dev/picoauth-server`, not pushed yet): Rust, axum + sqlx like
   idp-rs, one crate. The API is listed at the top of `src/web.rs`: `POST /check`, `/accounts`, `/login`,
@@ -316,6 +324,37 @@ block, systemd service, PostgreSQL role: to do with the author).
   - `PICOAUTH_SERVER` changes the address, only for tests against a local server.
   - Tests: `glupo_test.go` (a fake server), `glupo_real_test.go` (against a real server, only with
     `PICOAUTH_SERVER`, `PICOAUTH_TEST_INVITE`, `PICOAUTH_TEST_USER`): passed on 2026-11-14.
-- **Temporary:** `glupoServer` in `glupo.go` is `http://127.0.0.1:8686` (the server on the author's Mac)
-  while block 1 is tried locally, at the author's request. **Put back `https://api.picoauth.glupo.dev`
-  before the server goes on the VPS.**
+- `glupoServer` in `glupo.go` is `https://vault.glupo.dev/picoauth`. While block 1 was tried locally it
+  was `http://127.0.0.1:8686` for a while, at the author's request (launching Pico Auth with a variable
+  was too contorted for them).
+- Offline message (chosen by the author): "Cannot reach glupo.dev: the change was not saved. Try again
+  later." (the same with GitHub); "No connection…: nothing was changed. The codes still work." and
+  "No (active) connection…" were dropped.
+
+### On the VPS (2026-11-14)
+
+Done with the author, step by step, on the VPS `glupo` (infrastructure in `~/Projects/glupo-dev/netcup`):
+1. **DNS** at OVHcloud (Web Cloud › Domain names › glupo.dev › DNS zone): `vault` A `62.83.43.122` and
+   AAAA `2a0a:4cc0:60:3377:74d3:dbff:fefc:faf`, TTL 300.
+2. **PostgreSQL**: system user `picoauth` (nologin, no home), role `picoauth`, database `picoauth` owned by
+   it, peer access through the socket: `DATABASE_URL=postgres://picoauth@%2Frun%2Fpostgresql/picoauth`
+   (sqlx refuses an empty host: the socket folder goes in the host, `/` as `%2F`).
+3. **Server**: `deploy/package.sh` (in picoauth-server) builds the static Linux binary (cargo-zigbuild,
+   musl) and `dist/picoauth-server.tar.gz`; copied with `scp … glupo:~/`, unpacked, `sudo sh
+   picoauth-server/install.sh` (idempotent; keeps `/etc/picoauth/picoauth.env` and the old binary as
+   `.prev`). Service `picoauth-server` (systemd, user `picoauth`, hardened), `127.0.0.1:8686`.
+4. **Caddy**: block `vault.glupo.dev` at the end of `/etc/caddy/Caddyfile` (copy before:
+   `Caddyfile.prima-di-vault`), the Actalis certificate of sso (`tls …/sso.glupo.dev.*.pem`, so **its
+   renewal before 2027-05-15 covers vault too**), `handle_path /picoauth/*` → `reverse_proxy
+   127.0.0.1:8686`, anything else 404.
+5. Checked from the Mac: `/picoauth/health` ok in IPv4 and IPv6, certificate `*.glupo.dev` Actalis,
+   http → https. The author's Mac (test vault reset by hand first: it was linked to the local server)
+   linked as `gennaro`.
+
+Author's commands on the VPS: `picoauth invite`, `picoauth invites`, `picoauth revoke <username>` (a
+wrapper in `/usr/local/bin/picoauth`: runs the server binary as user `picoauth` from `/`, with the
+settings of `/etc/picoauth/picoauth.env`). Logs: `sudo journalctl -u picoauth-server`. Update: run
+`deploy/package.sh` on the Mac, copy, unpack, `sudo sh picoauth-server/install.sh`.
+
+**Next:** block 3 (add another device: first start › Open an existing vault › From glupo.dev, login,
+approval), then block 2 is tried for real with two devices.

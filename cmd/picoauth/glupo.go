@@ -23,11 +23,11 @@ import (
 // The account is a user name; its password is the master password, of which the server only gets
 // login_hash. Sign-up needs an invite code from the author. Each device keeps its own token.
 
-// glupoServer is the address of picoauth-server. PICOAUTH_SERVER changes it, only for tests
-// against a server on this computer (for example http://127.0.0.1:8686).
-// TEMPORARY (2026-11-14): the server on the author's Mac, while block 1 is tried locally.
-// Put back "https://api.picoauth.glupo.dev" when picoauth-server is on the VPS.
-const glupoServer = "http://127.0.0.1:8686"
+// glupoServer is the address of picoauth-server: on the author's VPS, Caddy sends
+// vault.glupo.dev/picoauth/* to it (a future Pico Password can have its own /picopassword).
+// PICOAUTH_SERVER changes it, only for tests against a server on this computer
+// (for example http://127.0.0.1:8686, without /picoauth).
+const glupoServer = "https://vault.glupo.dev/picoauth"
 
 // glupoPrefix starts the "repository" of a vault linked to glupo.dev in sync.json and in the
 // code: glupo.dev/<username>. A GitHub owner cannot contain a dot, so it never meets a repository.
