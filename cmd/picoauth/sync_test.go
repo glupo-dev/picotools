@@ -619,7 +619,7 @@ func TestConflict(t *testing.T) {
 	mac.typ("X")
 	mac.Key(gui.KeyEnter)
 	mac.until(t, func() bool { return !mac.saving })
-	if !strings.Contains(mac.text(), "deleted on another computer") || len(mac.vault.Accounts) != 1 {
+	if !strings.Contains(mac.text(), "deleted on another device") || len(mac.vault.Accounts) != 1 {
 		t.Fatal(mac.text())
 	}
 }

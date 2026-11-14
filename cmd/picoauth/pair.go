@@ -120,7 +120,7 @@ func openSecond(priv *ecdh.PrivateKey, id string, raw []byte) ([]byte, error) {
 	}
 	second, err := gcm.Open(nil, a.Nonce, a.Data, nil)
 	if err != nil {
-		return nil, errors.New("the answer cannot be opened by this computer")
+		return nil, errors.New("the answer cannot be opened by this device")
 	}
 	return second, nil
 }

@@ -60,13 +60,13 @@ func (m *model) renderStart() []line {
 			{gui.Strong("Open an existing vault", nil)},
 			nil,
 			{gui.Plain("  "), gui.Strong("1", gui.Accent), gui.Plain("  From GitHub")},
-			{gui.Colored("     The vault is on GitHub and another computer of yours is already linked to it.", gui.Muted)},
+			{gui.Colored("     The vault is on GitHub and another device of yours is already linked to it.", gui.Muted)},
 		}, m.footer("number choose · esc back")...)
 	}
 	return append([]line{
 		{gui.Strong("Welcome", nil)},
 		{gui.Colored("The accounts are kept in a file encrypted with a master password of your choice.", gui.Muted)},
-		{gui.Colored("This computer's keychain remembers it, so you type it only here and on a new computer.", gui.Muted)},
+		{gui.Colored("This device's keychain remembers it, so you type it only here and on a new device.", gui.Muted)},
 		{gui.Colored("If you lose it, the vault cannot be opened by anyone: write it down somewhere safe.", gui.Muted)},
 		nil,
 		{gui.Plain("  "), gui.Strong("1", gui.Accent), gui.Plain("  New vault")},

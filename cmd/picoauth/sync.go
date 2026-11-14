@@ -225,13 +225,13 @@ func (m *model) linked(v *syncView, repo, sha string, second, data []byte, err e
 		return
 	}
 	if err := writeFile(m.path, data); err != nil {
-		v.err = "The vault is on GitHub, but this computer could not save it: " + err.Error()
+		v.err = "The vault is on GitHub, but this device could not save it: " + err.Error()
 		return
 	}
 	m.vault.setSecond(second)
 	l := &linkState{Repo: repo, SHA: sha}
 	if err := l.save(m.path); err != nil {
-		v.err = "The vault is on GitHub, but this computer could not remember the link: " + err.Error()
+		v.err = "The vault is on GitHub, but this device could not remember the link: " + err.Error()
 		return
 	}
 	m.link = l
@@ -289,10 +289,10 @@ func (m *model) renderSettings() []line {
 	}
 	lines = append(lines,
 		line{gui.Plain("  "), gui.Strong("1", gui.Accent), gui.Plain("  Sync with GitHub")},
-		line{gui.Colored("     Put this vault in a private GitHub repository of yours, to have it on your other computers.", gui.Muted)},
+		line{gui.Colored("     Put this vault in a private GitHub repository of yours, to have it on your other devices.", gui.Muted)},
 		nil,
 		line{gui.Plain("  "), gui.Strong("2", gui.Accent), gui.Plain("  Delete this vault")},
-		line{gui.Colored("     Delete the vault and its accounts from this computer, to start again.", gui.Muted)},
+		line{gui.Colored("     Delete the vault and its accounts from this device, to start again.", gui.Muted)},
 	)
 	return append(lines, m.footer("number choose · esc back")...)
 }
@@ -313,7 +313,7 @@ func (m *model) renderSync() []line {
 	}
 	if v.pair != "" {
 		lines = append(lines,
-			line{gui.Plain("A linked computer of yours must approve this one. On it, open Pico Auth:")},
+			line{gui.Plain("A linked device of yours must approve this one. On it, open Pico Auth:")},
 			line{gui.Plain("it shows a code. Approve only if it is this one:  "), gui.Strong(v.pair, gui.ValueFg)},
 			nil,
 		)

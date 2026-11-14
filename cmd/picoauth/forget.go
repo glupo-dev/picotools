@@ -18,7 +18,7 @@ import (
 
 func (m *model) deleteVaultForm() {
 	m.confirmForget("Delete this vault",
-		"This deletes the vault and its "+count(len(m.vault.Accounts), "account")+" from this computer, for ever. Type delete to confirm",
+		"This deletes the vault and its "+count(len(m.vault.Accounts), "account")+" from this device, for ever. Type delete to confirm",
 		func() { m.forgotten("Vault deleted") })
 }
 
@@ -64,7 +64,7 @@ func (m *model) unlink(l *linkState) {
 			var sha string
 			_, sha, err = m.gh.getFile(ctx, l.Repo, computerPath(l.Computer))
 			if err == nil {
-				err = m.gh.deleteFile(ctx, l.Repo, computerPath(l.Computer), sha, "Pico Auth: a computer is unlinked")
+				err = m.gh.deleteFile(ctx, l.Repo, computerPath(l.Computer), sha, "Pico Auth: a device is unlinked")
 			}
 			if errors.Is(err, errNotFound) {
 				err = nil

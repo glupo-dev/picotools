@@ -43,12 +43,12 @@ func (m *model) join(v *syncView, repo string) {
 	go func() {
 		_, _, err := m.gh.getFile(ctx, repo, vaultFile)
 		if errors.Is(err, errNotFound) {
-			err = errors.New(repo + " holds no vault: link first the computer that has it (Settings › Sync with GitHub)")
+			err = errors.New(repo + " holds no vault: link first the device that has it (Settings › Sync with GitHub)")
 		}
 		var reqSHA string
 		if err == nil {
 			body, _ := json.Marshal(request{PublicKey: pub, Created: now})
-			reqSHA, err = m.gh.putFile(ctx, repo, requestPath(id), body, "", "Pico Auth: a new computer asks for access")
+			reqSHA, err = m.gh.putFile(ctx, repo, requestPath(id), body, "", "Pico Auth: a new device asks for access")
 		}
 		if err != nil {
 			later(func() { v.err = capitalize(err.Error()) })
@@ -132,7 +132,7 @@ func (m *model) askJoinPassword(repo string, raw []byte, sha string, second []by
 		}
 		m.vault, m.link, m.screen = v, l, screenList
 		m.register()
-		m.say("This computer is now linked to " + repo)
+		m.say("This device is now linked to " + repo)
 		return ""
 	})
 }
@@ -195,7 +195,7 @@ func (m *model) approveRune(r rune) {
 	req := m.approving
 	switch r {
 	case 'y', 'Y':
-		m.ask("Approve the new computer", []question{{label: "Master password of this vault", secret: true}}, func(a []string) string {
+		m.ask("Approve the new device", []question{{label: "Master password of this vault", secret: true}}, func(a []string) string {
 			if subtle.ConstantTimeCompare([]byte(a[0]), []byte(m.vault.password)) != 1 {
 				return "Wrong password"
 			}
@@ -206,16 +206,16 @@ func (m *model) approveRune(r rune) {
 				m.warn(capitalize(err.Error()))
 				return ""
 			}
-			m.say("Approving the new computer…")
+			m.say("Approving the new device…")
 			repo, ctx := m.link.Repo, m.background
 			go func() {
-				_, err := m.gh.putFile(ctx, repo, answerPath(req.id), body, "", "Pico Auth: access given to a new computer")
+				_, err := m.gh.putFile(ctx, repo, answerPath(req.id), body, "", "Pico Auth: access given to a new device")
 				m.ui(func() {
 					if err != nil {
 						m.warn("Could not approve: " + err.Error())
 						return
 					}
-					m.say("Approved: the new computer can now open the vault")
+					m.say("Approved: the new device can now open the vault")
 				})
 			}()
 			return ""
@@ -234,11 +234,11 @@ func (m *model) approveRune(r rune) {
 func (m *model) renderApprove() []line {
 	r := m.approving
 	return []line{
-		{gui.Strong("A new computer asks for access to this vault", gui.Amber)},
+		{gui.Strong("A new device asks for access to this vault", gui.Amber)},
 		nil,
 		{gui.Plain("Code:  "), gui.Strong(r.code, gui.ValueFg)},
 		nil,
-		{gui.Plain("Is it the same code shown on the new computer?")},
+		{gui.Plain("Is it the same code shown on the new device?")},
 		{gui.Colored("If it is different, or you did not ask, refuse: someone else wrote the request.", gui.Muted)},
 		nil,
 		{gui.Colored("y approve (asks the master password) · n refuse", gui.Muted)},

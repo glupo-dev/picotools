@@ -306,7 +306,12 @@ from this computer the vault file, `sync.json`, and from the keychain the master
 key and the GitHub access; Pico Auth then shows the first-start menu. The vault on GitHub is not
 touched.
 
-**Decided (2026-11-14): Linked devices** (labels "Linked devices" and "Unlink this device", chosen by the author over "computers"). Settings shows the list of the computers linked to the
+**Decided (2026-11-14): Linked devices** (labels "Linked devices" and "Unlink this device", chosen by the author over "computers").
+**Decided (2026-11-14): "device" everywhere.** Every text of Pico Auth says "device", never "computer":
+screens, messages and the commit messages on GitHub (for example "Pico Auth: opened on a device").
+Written. Not changed, because they are not texts the user reads in the app: the names in the code, the
+folder `computers/` in the repository and the field `computer` of `sync.json` (renaming them would break
+the vault already linked on the author's Mac). This document still says "computer" in its explanations. Settings shows the list of the computers linked to the
 vault (name, system, since when), view only, like the devices page of Netflix but **without removing a
 computer from another one**: each computer is unlinked only from itself. Why the list: the author knows
 which computers have the vault (a name they do not know is an alarm), and Pico Auth knows when the
@@ -541,7 +546,7 @@ as on GitHub) and `sync.json` (only when linked).
 
 In the repository: `vault.picoauth` (root), `requests/<id>.json`, `answers/<id>.json` (only while a
 computer is being added), `computers/<id>.json` (one per linked device). Every write is a commit made as
-the user (for example "Pico Auth: vault changed", "Pico Auth: opened on a computer").
+the user (for example "Pico Auth: vault changed", "Pico Auth: opened on a device").
 
 ---
 
@@ -549,8 +554,6 @@ the user (for example "Pico Auth: vault changed", "Pico Auth: opened on a comput
 
 - The **labels** of the first-start menu (section 4): written as `1 New vault`, `2 Open an existing
   vault`, then `1 From GitHub`, provisional.
-- "computer" or "device" in the other texts: Settings says "device" (the author's choice); the link and
-  the approval still say "computer". Offered to the author to change them too, no answer yet.
 - The conflict case "renamed here, deleted elsewhere" (section 7): the delete wins in the code, to confirm.
 - The **presentation page** at `https://picoauth.glupo.dev` before giving Pico Auth to others (2.1, 9).
 - **Changing the master password**: there is no such function; with sync the other computers would

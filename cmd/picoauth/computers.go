@@ -62,7 +62,7 @@ func (m *model) register() {
 	body, _ := json.Marshal(thisComputer(m.now()))
 	repo, ctx, l := m.link.Repo, m.background, m.link
 	go func() {
-		_, err := m.gh.putFile(ctx, repo, computerPath(id), body, "", "Pico Auth: a computer is linked")
+		_, err := m.gh.putFile(ctx, repo, computerPath(id), body, "", "Pico Auth: a device is linked")
 		m.ui(func() {
 			m.registering = false
 			if err == nil && m.link == l {
@@ -91,7 +91,7 @@ func (m *model) markUsed() {
 		if err == nil {
 			c.LastUsed = now
 			body, _ := json.Marshal(c)
-			_, err = m.gh.putFile(ctx, repo, path, body, sha, "Pico Auth: opened on a computer")
+			_, err = m.gh.putFile(ctx, repo, path, body, sha, "Pico Auth: opened on a device")
 		}
 		m.ui(func() {
 			m.markingUsed = false

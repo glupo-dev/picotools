@@ -41,7 +41,7 @@ func findAccount(as []*Account, a Account) int {
 	return -1
 }
 
-var errDeletedElsewhere = errors.New("the account was deleted on another computer")
+var errDeletedElsewhere = errors.New("the account was deleted on another device")
 
 // apply makes a change: on this computer only, or on GitHub first when the vault is linked.
 // done runs once the change is saved.
@@ -112,7 +112,7 @@ func (m *model) upload(c change, accs []*Account, done func(), attempt int) {
 				m.warn("Could not save on GitHub, nothing was changed: " + err.Error())
 			default:
 				if err := writeFile(m.path, data); err != nil {
-					m.warn("Saved on GitHub, but not on this computer: " + err.Error())
+					m.warn("Saved on GitHub, but not on this device: " + err.Error())
 				}
 				m.vault.Accounts = accs
 				m.link.SHA = newSHA

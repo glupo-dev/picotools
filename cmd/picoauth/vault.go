@@ -65,7 +65,7 @@ const (
 
 var (
 	errWrongPassword = errors.New("wrong password")
-	errNoSecondKey   = errors.New("this vault is linked to GitHub and needs the second key of this computer, which is not in the keychain")
+	errNoSecondKey   = errors.New("this vault is linked to GitHub and needs the second key of this device, which is not in the keychain")
 )
 
 // Vault holds the accounts in memory, with the key to save them again.
