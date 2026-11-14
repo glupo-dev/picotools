@@ -15,6 +15,8 @@ Not everything here was agreed: the status of each point is the label it carries
 - On GitHub everything is ready: the GitHub App is registered (section 2.1), the repository is created
   and the app is installed on it (section 2.2).
 - Export and restore were removed from the code (section 8).
+- A **second sync through glupo.dev**, next to this one, is designed (not built) in
+  [picoauth-glupo-sync.md](picoauth-glupo-sync.md).
 
 Each point is marked:
 - **Decided**: agreed with the author.
@@ -41,7 +43,7 @@ Each point is marked:
 | Alternative | Why it was dropped |
 |---|---|
 | A synced cloud folder (Dropbox, OneDrive, iCloud, Google Drive) | It would be the simplest (Pico Auth only reads a local file), but the author has none of them on both computers and does not want them. |
-| The author's own VPS | A small server to write, secure and maintain; the work network may block it. |
+| The author's own VPS | Dropped at first: a small server to write, secure and maintain; the work network may block it. These reasons were Claude's, not the author's (the author called the network one nonsense on 2026-11-14). **Reopened on 2026-11-14**: a sync through glupo.dev, next to GitHub, so that people who do not know GitHub can use it: [picoauth-glupo-sync.md](picoauth-glupo-sync.md). |
 | git (clone + pull/push) | The author does not want Pico Auth to depend on git. |
 | A GitHub token created by hand on each computer | Too contorted: create it on the site for each computer, copy it, paste it, create a new one when it expires. Replaced by the GitHub App login (section 2), where nothing is created or copied by hand. |
 
@@ -475,17 +477,23 @@ Consequences (facts, said to the author):
   public app on it (2.2). He registers nothing. Then he links his computers with his own login.
 - GitHub gives Mario's Pico Auth access only to his repository: he does not see the author's, the author
   does not see his. Each has their own master password and second key.
-- Who does not want GitHub uses Pico Auth standalone (on one computer only, section 8).
+- Who does not want GitHub uses Pico Auth standalone (on one computer only, section 8). Note
+  (2026-11-14): with the backup removed, a standalone vault is lost if its computer breaks, so in practice
+  the sync is also the safety copy; this is why a sync through glupo.dev is planned (below).
 - **To do before giving it to others**: the presentation page at `https://picoauth.glupo.dev`, the
   Homepage URL of the app (see 2.1).
+- **2026-11-14, in practice:** the GitHub setup (private repository, "install" the GitHub App) proved too
+  hard even for the author, who could not redo it alone; for other people, such as colleagues, the
+  author decided to add a sync through glupo.dev next to GitHub: [picoauth-glupo-sync.md](picoauth-glupo-sync.md).
 
 ---
 
 ## 10. Rejected: do not propose again
 
 Sync and storage:
-- Cloud-drive folders (Dropbox, OneDrive, iCloud, Google Drive) and the author's VPS: "piuttosto GitHub
-  con tutte le sue contorsioni".
+- Cloud-drive folders (Dropbox, OneDrive, iCloud, Google Drive): "piuttosto GitHub con tutte le sue
+  contorsioni". The author confirmed on 2026-11-14 that this phrase was about these services only, not
+  about the VPS (the VPS is now the planned second sync, [picoauth-glupo-sync.md](picoauth-glupo-sync.md)).
 - git (clone, pull, push): Pico Auth does not use git.
 - GitHub tokens created by hand on each computer: too contorted (replaced by the GitHub App login).
 - A typed "secret key" as second factor: it is a second password.
