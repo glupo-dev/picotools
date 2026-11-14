@@ -219,7 +219,16 @@ The author's case: the Mac already has a vault with its accounts, and the reposi
 
 Before: the repository exists and the app is installed on it (2.2).
 
-1. The user starts the link (**open**: from where, which key and screen; a key `s` in the account list was suggested).
+1. The user starts the link from the **Settings** page (below): key `s` in the account list → Settings → link to GitHub.
+
+**Decided (2026-11-14): the Settings page.** Pico Auth has no home page: it opens on the account list,
+because it is almost always opened to copy a code. The keys of that list (copy, new, rename, delete) are
+everyday actions on one account; linking to GitHub is a rare action on the whole vault and must not sit
+next to them. So the list has **one key, `s`, that opens a separate page, Settings**, with the rare
+administration operations, among them the link to GitHub. The name: "Vault" was proposed and rejected by
+the author, because 99% of people do not know what a vault is; "Settings" is the name people look for
+when they want to change something of the app. The exact content of the page is still to define
+(**proposed**: also delete the local vault and unlink this computer, section 12).
 2. Browser login (2.3).
 3. Pico Auth finds the repository and checks that it holds **no vault** (a README or other files do not count).
 4. It creates the second key and keeps it in the keychain.
@@ -421,17 +430,16 @@ All in `cmd/picoauth`:
 - `totp.go`: the codes and the `otpauth://` parsing. Not touched by sync.
 - `form.go`: the question forms (copied from Pico API). `main.go`: window, clipboard, the 1-second tick.
 - Keys of the list today: `n` new, `m` rename, `d` delete (only when there are accounts),
-  `enter`/`1-9` copy a code, `↑/↓` move, `esc`/`q` quit.
+  `enter`/`1-9` copy a code, `↑/↓` move, `esc`/`q` quit. Sync adds `s` Settings (section 5).
 - Tests: `totp_test.go`, `vault_test.go`, `model_test.go`. `./build.sh` builds every app into `dist/`.
 
 ---
 
 ## 12. Still open
 
-- The **key and screen** to link an existing local vault to GitHub (section 5).
 - The **labels** of the first-start menu (section 4).
-- The **key and screen to delete** a local vault and to **unlink** a computer (the rules are decided in
-  section 5, not the place).
+- The **content of the Settings page** (section 5): the labels, and whether delete a local vault and
+  unlink a computer go there too (proposed, the rules are decided in section 5, not the place).
 
 Technical points never discussed with the author (to decide when building, do not present as decided):
 - How the master password and the second key are combined into the vault key (for example Argon2id on
