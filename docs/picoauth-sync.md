@@ -5,7 +5,8 @@ Windows PC at work). This is the full design discussed with the author on 2026-1
 reasons behind each choice, so that work can continue from here without the original discussion.
 Not everything here was agreed: the status of each point is the label it carries.
 
-**Nothing here is built yet.** Today Pico Auth keeps the vault on one computer only
+**No code is written yet.** Only the GitHub App is registered (section 2.1, 2026-11-14).
+Today Pico Auth keeps the vault on one computer only
 (`picoauth/vault.picoauth` in the app settings folder) and moves it with Export → backup file.
 
 Each point is marked:
@@ -51,22 +52,65 @@ Instead of tokens created by hand, Pico Auth is a **GitHub App** and each comput
 
 ### 2.1 Register the app: once, by the author of Pico Auth
 
-**Decided**: a public GitHub App, registered once by the author, with Device Flow and only Contents
-read/write, installed only on the user's repository. **Proposed**: the name and the webhook off.
-GitHub App names are unique on GitHub: "Pico Auth" may be taken, and the page link depends on the
-name actually registered.
+**Done on 2026-11-14.** The app is registered by the author, owned by the organization **glupo-dev**
+(not the personal account genlupo), each field chosen by the author after the explanation below.
 
-On github.com: Settings → Developer settings → GitHub Apps → New GitHub App.
-- Name: "Pico Auth".
-- **Enable Device Flow** (the browser login of 2.3). Webhook off (not needed).
-- Permissions: only **Contents → Read and write**.
-- **Public**, so that other users can install it on their own repositories (see 9).
-- **Not done yet**: the app is not registered, there is no Client ID yet.
-- GitHub gives the **Client ID**: it goes into the Pico Auth code. It is not a secret and gives
-  no access by itself. It is free.
+| | |
+|---|---|
+| Name | **Pico Auth** |
+| Owner | `glupo-dev` (organization) |
+| Public page | `https://github.com/apps/pico-auth` |
+| Client ID | `Iv23liUsuaDQViHcGo3m` (goes into the Pico Auth code) |
+| App ID | `5757134` (not used by Pico Auth) |
 
-The app has a public page, `github.com/apps/<app name>`, showing its name, its author and the
-permissions it asks for. It shows nothing about who installed it or their repositories.
+How to get there in the browser (signed in as genlupo): avatar top right → **Organizations** →
+**Settings** next to glupo-dev → at the bottom of the left menu **Developer settings** → **GitHub Apps**
+→ Pico Auth. (A new app is made from the same page with **New GitHub App**.)
+
+Each field, what it is for and what was chosen:
+- **GitHub App name**: Pico Auth. Names are unique on GitHub; the public page link comes from it.
+- **Description**: "Keeps the Pico Auth vault in sync between your computers, through a private
+  repository of yours." Shown to whoever installs the app.
+- **Homepage URL**: `https://picoauth.glupo.dev`. It is the "website" link on the app's public page and
+  on the login screen: it tells a user who does not know the app what it is and who makes it, before
+  giving it access. Pico Auth never uses it. **To do when other users arrive (section 9)**: put a
+  presentation page there (what Pico Auth is, who makes it, how to use it, not technical). Until then
+  the address shows whatever the `*.glupo.dev` server answers for an unknown name. The field can be
+  changed at any time.
+- **Enable Device Flow**: on. It is the login of 2.3 (code typed on `github.com/login/device`), made
+  for programs on a computer.
+- **Redirect URI**, **Allow wildcard matching**, **Request user authorization (OAuth) during
+  installation**: empty / off. They are the login with redirect, made for websites.
+- **Expire user authorization tokens**: on. The access expires after about 8 hours and Pico Auth renews
+  it with the refresh token; an access stolen from a computer lasts little.
+- **Setup URL**, **Redirect on update**: empty / off. They send the user to a page of the app after
+  installing; Pico Auth has nothing to set up there.
+- **Webhook**: off (Active unchecked). A webhook is GitHub sending messages to a server of the app;
+  Pico Auth has no server and reads the repository by itself (section 7).
+- **Permissions**: only **Repository → Contents: Read and write**, plus **Metadata: Read-only**, which
+  GitHub adds to every app (mandatory). Everything else "No access". The fewer the permissions, the less
+  a stolen access can do: only the files of that repository.
+- **Subscribe to events**: none (they are the webhook messages).
+- **Where can this GitHub App be installed**: **Any account**. With "Only on this account" it could be
+  installed only on glupo-dev: the author's vault could not be in a personal repository
+  (for example `genlupo/picoauth-vault`) and other users could not use it. Any account shows nothing of
+  one user to the others.
+
+Credentials (left menu → Credentials):
+- **Key pairs**: GitHub requires a private key before the app can be installed, so one was generated
+  (a `.pem` file). The private key lets the app act **as itself** on every repository where it is
+  installed: it is for apps running on a server. **Pico Auth does not use it**: it always acts for the
+  user, through the Device Flow login. The `.pem` file is a secret: keep it off the disk (in 1Password)
+  or delete it; a new one can be made with **New key**. The SHA256 string shown is only the fingerprint
+  that tells keys apart.
+- **Client secrets**: none, keep it at 0. It is a password of the app for the website login; Device Flow
+  does not need it, and a program given to others cannot keep a secret anyway.
+
+- The **Client ID** is not a secret and gives no access by itself: it only tells GitHub which app asks
+  for the login. It is free.
+
+The public page `github.com/apps/pico-auth` shows the name, the author (glupo-dev), the description,
+the homepage link and the permissions. It shows nothing about who installed it or their repositories.
 
 ### 2.2 Create the repository and install the app: once, by each user (decided)
 
@@ -261,6 +305,8 @@ repeating one operation. This is different from section 5, where two independent
 - GitHub gives Mario's Pico Auth access only to his repository: he does not see the author's, the author
   does not see his. Each has their own master password and second key.
 - Who does not want GitHub uses Pico Auth standalone.
+- **To do before giving it to others**: the presentation page at `https://picoauth.glupo.dev`, the
+  Homepage URL of the app (see 2.1).
 
 ---
 
