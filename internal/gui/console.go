@@ -37,6 +37,26 @@ type Console struct {
 	onResize  func()
 	onRight   func(pos fyne.Position)
 	OnScroll  func(e *fyne.ScrollEvent) // optional: mouse wheel / trackpad
+	onKey     func(e *fyne.KeyEvent)
+	onRune    func(r rune)
+}
+
+// The console keeps the keyboard focus so that the Tab key reaches the app too: without
+// a focused widget that accepts it, Fyne uses Tab to move the focus and the app never sees it.
+func (c *Console) FocusGained()     {}
+func (c *Console) FocusLost()       {}
+func (c *Console) AcceptsTab() bool { return true }
+
+func (c *Console) TypedKey(e *fyne.KeyEvent) {
+	if c.onKey != nil {
+		c.onKey(e)
+	}
+}
+
+func (c *Console) TypedRune(r rune) {
+	if c.onRune != nil {
+		c.onRune(r)
+	}
 }
 
 func NewConsole(onResize func(), onRight func(fyne.Position)) *Console {

@@ -1,0 +1,6 @@
+[Details]
+Icon = "assets/icon.png"
+Name = "Pico Password"
+ID = "local.picopassword"
+Version = "0.1.0"
+Build = 17

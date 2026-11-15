@@ -22,6 +22,7 @@ const (
 	KeyPageDown  = "pagedown"
 	KeyHome      = "home"
 	KeyEnd       = "end"
+	KeyTab       = "tab"
 	KeyOther     = "other"
 )
 
@@ -69,7 +70,7 @@ func NewScreen(a fyne.App, w fyne.Window, app ConsoleApp) *Screen {
 	)
 
 	c := w.Canvas()
-	c.SetOnTypedKey(func(e *fyne.KeyEvent) {
+	typedKey := func(e *fyne.KeyEvent) {
 		s.con.ClearSelection()
 		switch e.Name {
 		case fyne.KeyUp:
@@ -94,6 +95,8 @@ func NewScreen(a fyne.App, w fyne.Window, app ConsoleApp) *Screen {
 			app.Key(KeyHome)
 		case fyne.KeyEnd:
 			app.Key(KeyEnd)
+		case fyne.KeyTab:
+			app.Key(KeyTab)
 		case fyne.KeyF11:
 			w.SetFullScreen(!w.FullScreen())
 			return
@@ -106,12 +109,17 @@ func NewScreen(a fyne.App, w fyne.Window, app ConsoleApp) *Screen {
 			app.Key(KeyOther)
 		}
 		s.Redraw()
-	})
-	c.SetOnTypedRune(func(r rune) {
+	}
+	typedRune := func(r rune) {
 		s.con.ClearSelection()
 		app.Rune(r)
 		s.Redraw()
-	})
+	}
+	// The keys reach the console while it has the focus, the window otherwise
+	// (for example right after the Copy/Paste menu took it).
+	c.SetOnTypedKey(typedKey)
+	c.SetOnTypedRune(typedRune)
+	s.con.onKey, s.con.onRune = typedKey, typedRune
 	// Ctrl+C / Ctrl+V on Windows and Cmd+C / Cmd+V on Mac; on Mac also accept Ctrl+V.
 	c.AddShortcut(&fyne.ShortcutCopy{}, func(fyne.Shortcut) { copySelection() })
 	c.AddShortcut(&fyne.ShortcutPaste{}, func(fyne.Shortcut) { paste() })
@@ -125,6 +133,7 @@ func NewScreen(a fyne.App, w fyne.Window, app ConsoleApp) *Screen {
 	}
 
 	w.SetContent(container.NewPadded(s.con))
+	c.Focus(s.con)
 	s.Redraw()
 	return s
 }
