@@ -1,14 +1,32 @@
-# Pico Password: preliminary analysis
+# Pico Password: design and state
 
 A new picotools app, **Pico Password**: a place to keep passwords, "a kind of 1Password". Idea of the
-author from 2026-11-13; this preliminary analysis was made with the author on 2026-11-14, step by step,
-at a high level, and taken to the screens on 2026-11-15.
+author from 2026-11-13; preliminary analysis with the author on 2026-11-14, step by step, at a high
+level; screens, the local app and the sync designed and built on 2026-11-15.
 
-**State on 2026-11-15:** the **local app** is built and committed (`cmd/picopassword`, section 9): no
-Site field, no search; the author tried it on a test vault of 120 dummy items. Then the **sync** with
-GitHub and glupo.dev was built the same day (section 5), with its own server `picopassword-server`, tried
-by the tests and against that server on the Mac; **not yet tried by the author**. The server is **on the
-VPS** since 2026-11-15, installed by the author step by step (section 5.1).
+**State at the end of 2026-11-15:**
+- The **local app** is built (`cmd/picopassword`, section 9): list, item page, Edit/New, History,
+  favourites, suggested passwords, Settings. No Site field, no search (sections 3, 4.7). The author tried
+  it on a test vault of 120 dummy items (since deleted) and said it works.
+- The **sync** with GitHub and glupo.dev is built (section 5), copied from Pico Auth, with its own server
+  **picopassword-server**, which is **online** at `https://vault.glupo.dev/picopassword`.
+- The author **created a real vault** on the Mac, linked it to glupo.dev as user **`gennaro`** (with an
+  invite made with `picopassword invite` on the VPS) and added one real password copied from 1Password:
+  the change reached the server.
+- **Not tried yet:** a second device (join and approval), the GitHub sync (the GitHub App needs its
+  private key and an installation first, section 5.1), being offline with a linked vault.
+- Committed and pushed: picotools `e94a828` (on `main`), and the server in its own private repository
+  `glupo-dev/picopassword-server` (`1835289`). After that only this document changed (not committed).
+
+**Next steps** (none decided, in the order they came up): try a second device from glupo.dev; make the
+private key of the GitHub App and try the GitHub sync; check the other apps after the `tab` change in
+`internal/gui` (section 9); then the open points of section 8, one at a time, each as one proposal with
+its screen.
+
+How to work with the author on this app (from this chat): show the **screen** (a mockup) for every
+proposal, not a description; **one version** at a time, not many; one step per message; do not move to
+another topic before the current one is settled; ask before building; do not write Claude's proposals as
+decisions.
 
 Read first, for what is reused: [picoauth-sync.md](picoauth-sync.md) (the vault, the second key, the
 approval of a new device, the GitHub sync) and [picoauth-glupo-sync.md](picoauth-glupo-sync.md) (the
@@ -18,6 +36,8 @@ Each point is marked:
 - **Decided**: agreed with the author.
 - **Proposed**: suggested by Claude, not confirmed by the author (silence is not agreement).
 - **Open**: not decided.
+- **Built** says what exists in the code; **Dropped** an idea set aside, with why. A built detail with no
+  mark (a message text, a minimum length) is Claude's, not confirmed by the author: treat it as Proposed.
 
 ---
 
@@ -73,9 +93,9 @@ passwords need; the author said "ok" and added the points marked below.
 
 - **Decided.** As in Pico Auth: `1 New vault` (asks the master password twice), or `2 Open an existing
   vault` → `1 From GitHub` / `2 From glupo.dev`.
-- **Built:** only `1 New vault` (at least 8 characters, typed twice), since there is no sync yet. The
-  master password goes in the keychain (service `picopassword`), so the app opens by itself afterwards;
-  when the keychain does not have it, the app asks it.
+- **Built**, both: `1 New vault` (at least 8 characters, typed twice) and `2 Open an existing vault`
+  (section 5). The master password goes in the keychain (service `picopassword`), so the app opens by
+  itself afterwards; when the keychain does not have it, the app asks it.
 
 ### 4.2 The list
 
@@ -131,10 +151,12 @@ Passwords   10 items
 - **Dropped:** **PgUp/PgDn** (the author: hard to find, in different places on different keyboards);
   **`n`/`p`** as in Pico DB (`n` is "new item").
 - **Decided.** **Rows per page: as many as fit in the window, at most 50**, as Pico DB (`listRoom` in
-  `cmd/picodb/render.go`: the window height less 9 lines, at most `pageSize` = 50). The author tried
+  `cmd/picodb/render.go`: the window height less 9 lines, 2 more while a message is shown, at most
+  `pageSize` = 50; built the same in `cmd/picopassword/render.go`, so a message takes 2 rows of the list
+  while it is shown, as in Pico DB). The author tried
   that Pico DB shows 50 rows on several PCs; **49 is not acceptable**, so Pico Password must use exactly
-  the lines of Pico DB around the list: logo 4, title and blank 2, a message 2 when there is one, blank
-  and keys 2.
+  the lines of Pico DB around the list (the code of both: `rows - 9`, `- 2` more while a message is
+  shown).
 - **Decided** (Claude's suggestion, to keep the 50 rows): the **keys on one line**, without shortening
   (about 115 characters; the tables line of Pico DB is about 105 and is shown whole). Not chosen: dropping
   the blank line under the title (it makes the list readable).
@@ -166,11 +188,16 @@ or in New (section 4.9).** The list works always, also without connection; chang
 - **Decided** (the author asked, Claude agreed): **changes disabled without connection** to the remote
   vault. When the last 10-second check could not reach the server, the keys that change the vault (`n`,
   and `e`, `f`, `d` on the item page) are grey and pressing them does nothing; a message says so
-  (**Proposed**: "No connection to glupo.dev: you can copy, not change"); at the next check that works
+  (the text is Claude's, built, **Proposed**: "No connection to glupo.dev: you can copy, not change",
+  with GitHub instead of glupo.dev for a vault on GitHub);
+  at the next check that works
   they come back by themselves. Why: better to say it at once than to let the user fill a form and
   refuse the change at the end (as Pico Auth does today). The message at saving ("the change was not
   saved") stays, since the connection can drop between two checks, while a form is open. A vault not
-  linked (local only) has no server: there everything always works. **Not built** (no sync yet).
+  linked (local only) has no server: there everything always works. **Built** (section 9): on the item
+  page Edit,
+  favourite and Delete are grey; in the list the keys line stays as it is, since it is all grey already
+  (**Proposed**).
 
 ### 4.5 Favourites
 
@@ -212,18 +239,8 @@ or in New (section 4.9).** The list works always, also without connection; chang
   practically none; a little more with a recorded meeting or a screenshot of a shared screen, still
   very small (2 characters of a long generated password help nobody; of a weak one a little). So it
   became a choice in Settings.
-- **Decided: Settings › Show passwords as** (the author's idea, 2026-11-15):
-
-  ```
-  Settings
-
-    1  Sync with GitHub
-    2  Sync with glupo.dev
-    3  Show passwords as:  One dot per character
-    4  Delete this vault
-  ```
-
-  `3` opens:
+- **Decided: Settings › Show passwords as** (the author's idea, 2026-11-15). The Settings page as built
+  is in section 4.11; `1 Show passwords as` opens:
 
   ```
   Show passwords as
@@ -253,8 +270,7 @@ or in New (section 4.9).** The list works always, also without connection; chang
     alone, the work PC shared in meetings); no sync, no conflicts; the vault holds only the items, as in
     Pico Auth. Price: a new device starts from the default.
   - **Decided.** The default is **One dot per character**.
-  - The position of the item in Settings is **Proposed**; as built (local app, no sync entries yet) it
-    is `1`, section 4.11.
+  - The position of the item in Settings (`1`) is **Proposed**.
 
 ### 4.7 Search: not in the first version
 
@@ -263,7 +279,7 @@ or in New (section 4.9).** The list works always, also without connection; chang
   said yet, so it stays **open**.
 - **Decided: two requirements the author called "imprescindibili"**, which any search must respect:
   find an item **with the arrows** and **copy the password with one key** (`enter`), with no step in
-  between; the other keys of the list (`u`, `r`, `e`, `n`, …) stay.
+  between; the other keys of the list (`u`, `r`, `o`, `n`, `f`, `s`) stay.
 - **Decided: the pico rule**, stated by the author on the way: **no more than 3 lines of instructions for
   the whole program**; an interface that needs explaining is wrong ("se non lo capisco io che sono lo
   sviluppatore devi completamente cambiare logica").
@@ -363,18 +379,21 @@ Edit Amazon
   end, `←/→` move it, typing inserts, `Backspace` deletes one character, paste inserts at the cursor
   (the author had noticed that in Pico Auth, if you do not keep a field, it is deleted and must be
   typed again; Pico Auth gets the same fix later, "ma non adesso").
-- **Decided** (the author): **the password is never shown**, only its length in dots, the old one and the
-  new one. So the old one cannot be corrected one character at a time: on the Password row any
+- **Decided** (the author): **a password typed by hand is never shown**, only its length in dots, one
+  per character, the old one and the new one (this page does not follow Show passwords as, which is for
+  the list, the item page and History; built so, not discussed). So the old one cannot be corrected one character at a time: on the Password row any
   character typed, a paste or `Backspace` **replaces it whole** (the author: "perfetto"). `↑/↓`, `enter`,
   `esc` leave it as it is: passing over the Password row changes nothing.
 - **Decided** (the author, firmly: "repeat ci deve sempre essere"): **Repeat**, the password typed twice.
-  In Edit the Repeat row appears only when the password is changed; in New it is always there. On Save,
+  In Edit the Repeat row appears only when the password is changed, and stays even if the new one is
+  then emptied; in New it is always there. On Save,
   if they differ: "The two passwords are different", the cursor on Repeat, emptied.
 - **Decided** (the author): on the **Password** row, **`←` suggests a strong password and `→` a stronger
-  one** (section 4.12). A suggested password **is shown in clear**, and Repeat is filled with it; each
+  one** (section 4.12). A suggested password **is shown in clear**, and Repeat is filled with it, also in
+clear; each
   press makes a new one. Typing or `Backspace` after a suggestion starts again by hand (dots, Repeat to
   type).
-- On Save: a name and a user cannot be empty; a changed password goes into the History (section 4.10);
+- On Save: a name, a user and a changed password cannot be empty; a changed password goes into the History (section 4.10);
   the items are sorted again by name. Edit goes back to the item page ("Amazon saved"); New goes back to
   the list with the new item selected ("Amazon added"); `esc` in New goes back to the list.
 
@@ -395,7 +414,7 @@ Edit Amazon
 
 - **Decided** (the author): the **old passwords** of an item, with the date they were replaced, on their
   own page (`h` on the item page); **at most 10**, the newest first, the oldest dropped. Only a change
-  of the password in Edit adds one.
+  of the password in Edit adds one (also when that change meets a change of another device, 5.2 case 4).
 
 ```
 Amazon › History
@@ -412,6 +431,8 @@ Amazon › History
 
 ### 4.11 Settings, as built
 
+A vault not synced:
+
 ```
 Settings
 
@@ -421,19 +442,32 @@ Settings
   2  Suggested passwords:  strong 20 · stronger 30
      How long and with which characters the passwords suggested with ← and → are.
 
-  3  Delete this vault
+  3  Sync with GitHub
+     Put this vault in a private GitHub repository of yours, to have it on your other devices.
+
+  4  Sync with glupo.dev
+     Put this vault on glupo.dev with an invite code, to have it on your other devices.
+
+  5  Delete this vault
      Deletes the vault and its passwords from this device, for ever.
 
 number choose · esc back
 ```
 
-- `1` Show passwords as (section 4.6); `2` Suggested passwords (section 4.12); `3` Delete this vault, as
-  Pico Auth: type `delete`, then the master password; it removes the vault file, the preferences and the
-  keychain entry, and goes back to the first start.
-- **Proposed**: the numbers as keys, as in Pico Auth (asked to the author whether to remove them, as in
-  the list: no answer yet).
-- The sync entries of section 4.6 (GitHub, glupo.dev, Linked devices, Reset this device) come with the
-  sync.
+A synced vault: the line "Synced with glupo.dev: gennaro" (or "Synced with GitHub: owner/repo") on top,
+then `1` and `2` as above, `3 Linked devices`, `4 Reset this device` ("The vault stays on glupo.dev").
+
+- `1` Show passwords as (section 4.6); `2` Suggested passwords (section 4.12; also a choice of this
+  device only, though its description does not say so); `3`/`4` the sync (section 5; the entries do
+  what Pico Auth's do, the order is different: Pico Auth has Reset `1` and Linked devices `2`); `5` Delete this vault, as Pico Auth: type `delete`, then the master password; it
+  removes the vault file, the link, the preferences and the keychain entries, and goes back to the first
+  start. Reset this device does the same for a synced device, after removing it from Linked devices; the
+  vault stays on the server.
+- The descriptions under the entries are the app's texts as built: `1` says "the list", though the
+  choice also applies to the item page and History; `2` does not say "on this device only". To fix if
+  the author wants.
+- **Proposed**: the order of the entries, and the numbers as keys as in Pico Auth (asked to the author
+  whether to remove them, as in the list: no answer yet).
 
 ### 4.12 Suggested passwords (the generator)
 
@@ -491,8 +525,9 @@ is made in Pico Password and pasted into the site.
 - **Built:** **picopassword-server** in `~/Projects/glupo-dev/picopassword-server`, a copy of
   picoauth-server with its own names: database `picopassword`, port **8687**, service
   `picopassword-server`, command `picopassword` (invite, invites, revoke), settings
-  `/etc/picopassword/picopassword.env`; the vault file `vault.picopassword`. A local git repository, not
-  committed, not on GitHub. **On the VPS** since 2026-11-15, installed by the author (the author chose
+  `/etc/picopassword/picopassword.env`; the vault file `vault.picopassword`. Its repository is
+  **`glupo-dev/picopassword-server`, private** on GitHub (created by Claude at the author's request).
+  **On the VPS** since 2026-11-15, installed by the author (the author chose
   to do it, with Claude's commands): system user, role and database `picopassword` (peer access), the
   package from `deploy/package.sh` with `install.sh`, and in the `vault.glupo.dev` block of Caddy
   `handle_path /picopassword/*` → `reverse_proxy 127.0.0.1:8687`, before `handle` (copy of before:
@@ -500,6 +535,11 @@ is made in Pico Password and pasted into the site.
   and IPv6, `/picoauth/health` still ok. Details in the VPS notes (`~/Projects/glupo-dev/netcup/CLAUDE.md`).
 - The `login_hash` is salted with `picopassword-login:` and the user name, so the same user name and
   password on the two servers never give the same hash.
+- Author's commands on the VPS: `picopassword invite` (a new invite code), `picopassword invites`,
+  `picopassword revoke <username>`; logs `sudo journalctl -u picopassword-server`. Update: on the Mac
+  `deploy/package.sh` in picopassword-server, `scp dist/picopassword-server.tar.gz glupo:~/`, on the VPS
+  `tar -xzf picopassword-server.tar.gz && sudo sh picopassword-server/install.sh`. At start the log has a
+  harmless warning about `.pgpass` (the user `picopassword` has no home).
 
 ### 5.2 Changes and conflicts
 
@@ -514,7 +554,7 @@ the sha of the file, glupo.dev with its `version` field (picoauth-sync.md 7).
 
 The cases, from the most common:
 1. One change at a time: none. The other devices see it within about 10 seconds.
-2. No connection: the change is refused (and `e`/`n` are grey, section 4.4); nothing pending.
+2. No connection: the change is refused (section 4.4); nothing pending.
 3. Two devices change two different items at the same time: none, both kept (as above).
 4. **Two devices change the same item at the same time.** Pico Auth finds an item again **by its
    contents** (name, user, secret), because items have no id. In Pico Password changing the password is
@@ -522,7 +562,9 @@ The cases, from the most common:
    "the item was deleted on another device", which is false. **Proposed** (consequence, not discussed
    further), **built**: **every item has a hidden id**, so it is found again even when changed. Then:
    - the **same field** changed on both (Mac sets the password `AAA`, PC `BBB`): **the last one wins**
-     (`BBB`); nothing breaks, all devices end aligned;
+     (`BBB`); nothing breaks, all devices end aligned. As built, when the last one is a changed password,
+     the one it replaced (`AAA`) goes into its History, so it is not lost. Never confirmed by the author
+     (only explained), as in Pico Auth;
    - **different fields** (Mac the password, PC the favourite): the PC applies again only its own change,
      both stay.
 5. A change on one device, a delete on the other: **the delete wins**, as in Pico Auth (decided by the
@@ -560,7 +602,7 @@ password of the vault**. With two apps there are two vaults, so either:
 1. **one account, one master password** for Pico Auth and Pico Password, or
 2. **two accounts, two master passwords**, one each.
 
-**Decided: 1, one account and one master password.**
+**Decided then, replaced since: 1, one account and one master password.**
 
 How it was decided. Claude listed three disadvantages of option 1; going through them one by one with
 the author, they turned out smaller than first presented:
@@ -591,8 +633,8 @@ why the app opens by itself. Not on GitHub, not on glupo.dev (the server gets on
 Argon2id of the password, and keeps its SHA-256), not inside the vault file. So after a change every
 device has the old password in its keychain: it notices (the login fails) and asks the new one once.
 
-**Proposed** (the author asked whether it is solvable): each app updates its own vault at its first
-opening after the change.
+**Proposed, now moot** (two separate apps, nothing to keep aligned between them): each app updates its
+own vault at its first opening after the change.
 1. Mario changes the password from Pico Auth: Pico Auth encrypts its vault again with the new password
    and changes the account password on the server.
 2. Days later Mario opens Pico Password on the PC: its login with the old password (in its keychain) is
@@ -604,18 +646,19 @@ Edge case: between 1 and 4 Mario adds a new device to Pico Password; it knows on
 while the vault is still encrypted with the old one. To handle, for example by asking the old password
 in that case.
 
-- **Open.** Whether a master password change is wanted at all (the author: not decided yet, "anche se
-  forse sarebbe preferibile"). It does not exist in Pico Auth either (picoauth-sync.md 12).
+- **Still open** (section 8): whether a master password change is wanted at all (the author: not
+  decided yet, "anche se forse sarebbe preferibile"). It does not exist in Pico Auth either
+  (picoauth-sync.md 12).
 
 ## 7. Proposed by Claude, not decided
 
 Claude's first high-level picture had more details. The author: "mi convince quasi tutto se non tutto",
-but "sei già sceso troppo nei dettagli". So these are **Proposed**, to take up when the base is defined
-(the list, the keys, how the password is shown and the generator became decisions in section 4):
-- the vault, second key, approval and sync code, today inside `cmd/picoauth`, moved to a shared part used
-  by both apps;
+but "sei già sceso troppo nei dettagli". What became a decision went into sections 4 and 5. Left:
 - the clipboard cleared after some seconds (a copied password otherwise stays there until something else
-  is copied). Pico Auth already clears a copied code after 30 seconds; Pico Password does not yet.
+  is copied). Pico Auth already clears a copied code after 30 seconds; Pico Password does not. Told to
+  the author only as a note ("the copied password stays in the clipboard"), never discussed.
+- **Dropped:** moving the sync code of Pico Auth to a part shared by both apps: the author chose two
+  separate apps with the code copied (section 5.1).
 
 ## 8. Still open
 
@@ -625,10 +668,14 @@ but "sei già sceso troppo nei dettagli". So these are **Proposed**, to take up 
 - **Suggested passwords per device or in the vault** (section 4.12).
 - **The numbers in Settings** (section 4.11).
 - **Master password change**: not in Pico Auth either.
-- **Import from 1Password**: without it, the passwords one already has must be typed again by hand.
+- **Clipboard cleared after a copy** (section 7): not discussed yet; for a password manager it matters.
+- **Import from 1Password** (raised by Claude, not discussed): without it, the passwords one already has
+  must be typed again by hand (the author copied a first real one by hand).
 - **Lock**: Pico Auth opens by itself on a device; for passwords maybe it should lock after some
   inactivity, as 1Password does.
 - **Later, decided:** the fields of the Pico Auth forms editable as here (section 4.9).
+- **To check:** the other apps (Pico DB, Pico Edit, …) after the `tab` change in `internal/gui`
+  (section 9): not tried in a real window.
 - Everything in section 7.
 
 ## 9. Implementation notes
@@ -636,17 +683,22 @@ but "sei già sceso troppo nei dettagli". So these are **Proposed**, to take up 
 Built on 2026-11-15 in `cmd/picopassword`, on the model of `cmd/picoauth` and the lists of `cmd/picodb`:
 
 - `vault.go`: the vault file `~/Library/Application Support/picopassword/vault.picopassword` (the
-  config folder of the system), a JSON envelope (`format` "picopassword", `version` 1) with the items
+  config folder of the system), a JSON envelope (`format` "picopassword", `version` 1, or 2 when synced,
+  with the second key) with the items
   encrypted with **AES-256-GCM** under a key made by **Argon2id** (3 passes, 64 MiB, 4 threads, random
   salt) from the master password. Written to a temporary file with mode 0600, then renamed. The master
   password is in the keychain (go-keyring, service `picopassword`, account `master password`).
 - An item: `ID` (random hex, hidden, for the sync conflicts of section 5.2), `Name`, `User`, `Password`,
   `Favourite`, `History` (at most 10 `{Password, Replaced}`).
 - `settings.go`: the preferences of the device in `prefs.json` next to the vault (`show_passwords`,
-  `strong`, `stronger`); Settings and Delete this vault. `generate.go`: the suggested passwords.
+  `strong`, `stronger`); Settings. `generate.go`: the suggested passwords. `sync.json` next to the vault
+  is the link (as Pico Auth).
 - `model.go` (the list, the keys), `item.go` (item page, History, Delete), `edit.go` (Edit and New),
   `form.go` (the questions one at a time, still used for the master password and Settings), `render.go`.
-- `model_test.go`: the flows by keys, with the keychain mocked (`keyring.MockInit`).
+- `model_test.go`: the flows by keys, with the keychain mocked (`keyring.MockInit`); `device_test.go`
+  the helpers of the sync tests. `go test -race ./cmd/picopassword` (all pass); the real-server test runs
+  only with `PICOPASSWORD_SERVER`, `PICOPASSWORD_TEST_INVITE`, `PICOPASSWORD_TEST_USER` (passed against
+  the server on the Mac).
 - `internal/gui`, for every app: Fyne used `tab` to move the focus and the apps never received it, so
   the console now keeps the keyboard focus and accepts `tab` (`KeyTab`). Pico Password no longer uses
   `tab`; the change stays, and the other apps were not tried after it.
@@ -667,8 +719,10 @@ Built on 2026-11-15 in `cmd/picopassword`, on the model of `cmd/picoauth` and th
   - an item deleted on another device closes its open pages at the next second;
   - Settings: `1` Show passwords as, `2` Suggested passwords, then not synced `3` Sync with GitHub, `4`
     Sync with glupo.dev, `5` Delete this vault; synced `3` Linked devices, `4` Reset this device
-    (**Proposed**: the order); Reset and Delete also remove `prefs.json`;
+    (section 4.11); Reset and Delete also remove `prefs.json`;
   - the first start has `2 Open an existing vault` › From GitHub / From glupo.dev, as Pico Auth;
-  - not copied: clearing the clipboard after 30 seconds (section 7).
+  - not copied: clearing the clipboard after 30 seconds (section 7);
+  - the glupo.dev form fields are editable (prefilled values are kept and edited), unlike Pico Auth,
+    where typing replaces them.
 - **The test vault** of the author's machine (120 dummy items, a random master password kept only in the
   keychain) was deleted on 2026-11-15 with its keychain entry: the next start is New vault.
