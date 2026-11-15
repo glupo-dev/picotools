@@ -1,11 +1,8 @@
 package main
 
 import (
-	"crypto/subtle"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -14,9 +11,10 @@ import (
 	"picotools/internal/gui"
 )
 
-// Settings (docs/picopassword.md, section 4.6): how passwords are shown, a choice of this
-// device only, kept in a small file next to the vault, not in the vault and not synced; and
-// Delete this vault, as in Pico Auth.
+// Settings (docs/picopassword.md, section 4.11): how passwords are shown and the suggested
+// passwords, choices of this device only, kept in a small file next to the vault, not in the
+// vault and not synced; then the sync, Linked devices, Reset this device and Delete this vault,
+// as in Pico Auth (sync.go, computers.go, forget.go).
 
 // prefs are the choices of this device.
 type prefs struct {
@@ -89,15 +87,26 @@ func (m *model) mask(pw string) string {
 	return dots(len(r))
 }
 
+func (m *model) openSettings() { m.revealed, m.screen = "", screenSettings }
+
+// settingsRune: the choices of this device first, then the sync, as in Pico Auth.
 func (m *model) settingsRune(r rune) {
-	switch r {
-	case '1':
+	switch {
+	case r == '1':
 		m.showCursor, m.screen = m.showChoice(), screenShowAs
-	case '2':
+	case r == '2':
 		m.newExamples()
 		m.screen = screenSuggest
-	case '3':
+	case m.link == nil && r == '3':
+		m.startLink()
+	case m.link == nil && r == '4':
+		m.startGlupoLink()
+	case m.link == nil && r == '5':
 		m.deleteVaultForm()
+	case m.link != nil && r == '3':
+		m.openComputers()
+	case m.link != nil && r == '4':
+		m.unlinkForm()
 	}
 }
 
@@ -185,36 +194,4 @@ func (m *model) chooseShow(i int) {
 	}
 	m.screen = screenSettings
 	m.say("Passwords shown as: " + showChoices[i].label)
-}
-
-// deleteVaultForm asks to type delete and the master password, as in Pico Auth, then removes
-// from this device the vault, its preferences and the password in the keychain.
-func (m *model) deleteVaultForm() {
-	n := len(m.vault.Items)
-	what := "1 item"
-	if n != 1 {
-		what = strings.TrimSpace(count(n, "item"))
-	}
-	m.ask("Delete this vault", []question{
-		{label: "This deletes the vault and its " + what + " from this device, for ever. Type delete to confirm", check: func(v string, _ []string) string {
-			if v != "delete" {
-				return "Type delete, or esc to go back"
-			}
-			return ""
-		}},
-		{label: "Master password", secret: true},
-	}, func(a []string) string {
-		if subtle.ConstantTimeCompare([]byte(a[1]), []byte(m.vault.password)) != 1 {
-			return "Wrong password"
-		}
-		for _, p := range []string{m.path, prefsPath(m.path)} {
-			if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
-				return "Could not delete: " + err.Error()
-			}
-		}
-		deletePassword()
-		m.vault, m.prefs, m.cursor, m.favOnly, m.screen = nil, prefs{}, 0, false, screenStart
-		m.say("Vault deleted")
-		return ""
-	})
 }

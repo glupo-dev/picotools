@@ -230,7 +230,7 @@ func TestEditHistoryFavouriteDelete(t *testing.T) {
 	m.Rune('e')
 	typeText(m, "X")
 	m.Key(gui.KeyEsc)
-	if m.screen != screenItem || it.Name != "Amazon" {
+	if it = m.current(); m.screen != screenItem || it.Name != "Amazon" {
 		t.Fatalf("esc cancels: %+v", it)
 	}
 	m.Rune('e')
@@ -241,7 +241,7 @@ func TestEditHistoryFavouriteDelete(t *testing.T) {
 		t.Fatalf("up from Name: row %d", m.edit.row)
 	}
 	m.Key(gui.KeyEnter)
-	if m.screen != screenItem || it.Name != "Amazon" || len(it.History) != 1 {
+	if it = m.current(); m.screen != screenItem || it.Name != "Amazon" || len(it.History) != 1 {
 		t.Fatalf("edit name: screen %v item %+v", m.screen, it)
 	}
 
@@ -257,12 +257,12 @@ func TestEditHistoryFavouriteDelete(t *testing.T) {
 
 	// Favourite, and the list of favourites only.
 	m.Rune('f')
-	if !it.Favourite {
+	if it = m.current(); !it.Favourite {
 		t.Fatal("f makes it a favourite")
 	}
 	m.Key(gui.KeyEsc)
 	m.Rune('f')
-	if len(m.shown()) != 1 || m.selected() != it {
+	if len(m.shown()) != 1 || m.selected().ID != it.ID {
 		t.Fatalf("only favourites: %d shown", len(m.shown()))
 	}
 	m.Rune('f')
@@ -283,7 +283,7 @@ func TestEditHistoryFavouriteDelete(t *testing.T) {
 	}
 
 	// Everything was saved.
-	v, err := openVault(m.path, "master-pw")
+	v, err := openVault(m.path, "master-pw", nil)
 	if err != nil || len(v.Items) != 1 {
 		t.Fatalf("reopen: %v %v", err, v)
 	}
@@ -339,7 +339,7 @@ func TestDeleteVault(t *testing.T) {
 	m := newTestModel(t)
 	addItem(m, "A", "u", "pw")
 	m.Rune('s')
-	m.Rune('3')
+	m.Rune('5')
 	typeText(m, "delete")
 	m.Key(gui.KeyEnter)
 	typeText(m, "master-pw")

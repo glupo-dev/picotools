@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"os"
@@ -14,17 +15,20 @@ import (
 type screen int
 
 const (
-	screenStart    screen = iota // first start: new vault
-	screenList                   // the items
-	screenItem                   // the page of one item: its data and what can be done with it
-	screenHistory                // the old passwords of an item
-	screenDelete                 // "Delete Amazon?": type yes
-	screenSettings               // the rare operations on the whole vault
-	screenShowAs                 // Settings › Show passwords as
-	screenSuggest                // Settings › Suggested passwords
-	screenEdit                   // Edit: name, user, password and Save on one page
-	screenForm                   // questions, one after the other
-	screenFatal                  // something went wrong at start: only esc
+	screenStart     screen = iota // first start: new vault, or open an existing one
+	screenList                    // the items
+	screenItem                    // the page of one item: its data and what can be done with it
+	screenHistory                 // the old passwords of an item
+	screenDelete                  // "Delete Amazon?": type yes
+	screenSettings                // the rare operations on the whole vault
+	screenShowAs                  // Settings › Show passwords as
+	screenSuggest                 // Settings › Suggested passwords
+	screenEdit                    // Edit: name, user, password and Save on one page
+	screenForm                    // questions, one after the other
+	screenSync                    // linking the vault to GitHub or glupo.dev, while it works
+	screenApprove                 // a new device asks for access
+	screenComputers               // the linked devices
+	screenFatal                   // something went wrong at start: only esc
 )
 
 // How long a revealed password stays in clear on screen.
@@ -34,8 +38,13 @@ const revealLife = 30 * time.Second
 // It knows nothing about the window: the clipboard and quitting go through callbacks.
 type model struct {
 	vault   *Vault
-	path    string // the vault file
-	prefs   prefs  // the choices of this device
+	path    string     // the vault file
+	link    *linkState // the sync of this device, nil if not synced
+	gh      *github
+	gl      *glupo
+	rs      remotes // the file operations, to GitHub or glupo.dev by the link
+	sync    *syncView
+	prefs   prefs // the choices of this device
 	screen  screen
 	cursor  int  // selected item, in the list as shown
 	favOnly bool // the list shows only the favourites
@@ -52,6 +61,21 @@ type model struct {
 	revealed   string // what is shown in clear: an item id, or "history:<n>"; "" nothing
 	revealedAt time.Time
 
+	// The sync, as in Pico Auth.
+	startPage   int // first start: 0 the main menu, 1 open an existing vault
+	checkEvery  time.Duration
+	lastCheck   time.Time
+	checking    bool // reading the remote vault
+	saving      bool // a change is being uploaded
+	offline     bool // the last check could not reach GitHub or glupo.dev: no changes
+	registering bool // writing the file of this device in computers/
+	usedWritten bool // the time of this opening is in the file of this device
+	markingUsed bool
+	computers   *computersView
+	handled     map[string]bool // requests already approved or refused
+	approving   *pendingRequest // the request on screen
+	background  context.Context // for the checks that run while Pico Password is open
+
 	form  *form
 	edit  *editPage
 	fatal string
@@ -60,19 +84,30 @@ type model struct {
 	cols   int
 	rows   int
 
-	copy func(text string)
-	quit func()
-	now  func() time.Time
+	copy    func(text string)
+	quit    func()
+	now     func() time.Time
+	ui      func(func()) // runs a function in the user interface, from any goroutine
+	openURL func(string)
 }
 
 func newModel(path string) *model {
+	gh, gl := newGitHub(), newGlupo()
 	return &model{
-		path: path,
-		cols: gui.DefaultCols,
-		rows: gui.DefaultRows,
-		copy: func(string) {},
-		quit: func() {},
-		now:  time.Now,
+		path:       path,
+		cols:       gui.DefaultCols,
+		rows:       gui.DefaultRows,
+		copy:       func(string) {},
+		quit:       func() {},
+		now:        time.Now,
+		ui:         func(f func()) { f() },
+		openURL:    func(string) {},
+		gh:         gh,
+		gl:         gl,
+		rs:         remotes{gh: gh, gl: gl},
+		checkEvery: checkEvery,
+		handled:    map[string]bool{},
+		background: context.Background(),
 	}
 }
 
@@ -83,9 +118,10 @@ func (m *model) start() {
 		m.screen = screenStart
 		return
 	}
+	m.link = loadLink(m.path)
 	pw, err := savedPassword()
 	if err == nil && pw != "" {
-		v, err := openVault(m.path, pw)
+		v, err := m.openWith(pw)
 		if err == nil {
 			m.vault, m.screen = v, screenList
 			return
@@ -103,7 +139,7 @@ func (m *model) start() {
 func (m *model) askPassword() {
 	m.screen = screenFatal // esc quits
 	m.ask("Open Pico Password", []question{{label: "Master password", secret: true}}, func(a []string) string {
-		v, err := openVault(m.path, a[0])
+		v, err := m.openWith(a[0])
 		if errors.Is(err, errWrongPassword) {
 			return "Wrong password"
 		}
@@ -119,6 +155,15 @@ func (m *model) askPassword() {
 	m.form.cancel = m.quit
 }
 
+// openWith opens the vault with a password and the second key of the keychain, if any.
+func (m *model) openWith(pw string) (*Vault, error) {
+	second, err := savedSecond()
+	if err != nil {
+		return nil, err
+	}
+	return openVault(m.path, pw, second)
+}
+
 func (m *model) fail(msg string) { m.fatal, m.screen = capitalize(msg), screenFatal }
 
 // ---- Keys ----
@@ -130,9 +175,23 @@ func (m *model) Key(k string) {
 		m.status = nil
 	}
 	switch m.screen {
-	case screenStart, screenFatal:
+	case screenStart:
+		if k == gui.KeyEsc {
+			if m.startPage == 1 {
+				m.startPage = 0
+			} else {
+				m.quit()
+			}
+		}
+	case screenFatal:
 		if k == gui.KeyEsc {
 			m.quit()
+		}
+	case screenSync:
+		m.syncKey(k)
+	case screenComputers:
+		if k == gui.KeyEsc {
+			m.screen = screenSettings
 		}
 	case screenList:
 		if k == gui.KeyEsc {
@@ -170,9 +229,20 @@ func (m *model) Rune(r rune) {
 	}
 	switch m.screen {
 	case screenStart:
-		if r == '1' {
+		switch {
+		case m.startPage == 0 && r == '1':
 			m.newVaultForm()
+		case m.startPage == 0 && r == '2':
+			m.startPage = 1
+		case m.startPage == 1 && r == '1':
+			m.startJoin()
+		case m.startPage == 1 && r == '2':
+			m.startGlupoJoin()
 		}
+	case screenApprove:
+		m.approveRune(r)
+	case screenSync:
+		m.syncRune(r)
 	case screenList:
 		m.listRune(r)
 	case screenItem:
@@ -209,8 +279,14 @@ func (m *model) Paste(text string) {
 
 func (m *model) CanPaste() bool { return m.screen == screenForm || m.screen == screenEdit }
 
-// tick runs every second: a revealed password hides again after revealLife.
+// tick runs every second: a synced vault is checked every checkEvery, an item deleted on another
+// device closes its pages, and a revealed password hides again after revealLife.
 func (m *model) tick() {
+	if m.now().Sub(m.lastCheck) >= m.checkEvery {
+		m.lastCheck = m.now()
+		m.checkRemote()
+	}
+	m.leaveIfGone()
 	if m.revealed != "" && m.now().Sub(m.revealedAt) >= revealLife {
 		m.revealed = ""
 	}
@@ -223,6 +299,41 @@ func (m *model) toggleReveal(id string) {
 	}
 	m.revealed, m.revealedAt = id, m.now()
 }
+
+// leaveIfGone goes back to the list when the open item was deleted on another device.
+func (m *model) leaveIfGone() {
+	switch m.screen {
+	case screenItem, screenHistory, screenDelete:
+	case screenEdit:
+		if m.edit.item == nil {
+			return
+		}
+	default:
+		return
+	}
+	if m.vault != nil && m.current() == nil {
+		m.edit = nil
+		m.backToList()
+		m.warn("The item was deleted on another device")
+	}
+}
+
+// canChange says whether the vault can be changed now; if not, it says why. A synced vault is
+// changed only online (docs/picopassword.md, section 4.4), and one change at a time.
+func (m *model) canChange() bool {
+	switch {
+	case m.saving:
+		m.warn("Wait: the last change is being saved")
+		return false
+	case m.link != nil && m.offline:
+		m.warn("No connection to " + m.where() + ": you can copy, not change")
+		return false
+	}
+	return true
+}
+
+// changeOff says whether the keys that change the vault are shown grey.
+func (m *model) changeOff() bool { return m.saving || (m.link != nil && m.offline) }
 
 // ---- The list ----
 
@@ -263,12 +374,13 @@ func (m *model) listRune(r rune) {
 	case r == 'o' && it != nil:
 		m.openItem(it)
 	case r == 'n':
-		m.openNew()
+		if m.canChange() {
+			m.openNew()
+		}
 	case r == 'f':
 		m.toggleFavOnly()
 	case r == 's':
-		m.revealed = ""
-		m.screen = screenSettings
+		m.openSettings()
 	}
 }
 
@@ -313,6 +425,15 @@ func (m *model) selectItem(it *Item) {
 		return
 	}
 	m.cursor = min(m.cursor, max(len(m.shown())-1, 0))
+}
+
+// selectID puts the cursor on the item with this id, if it is in the list as shown.
+func (m *model) selectID(id string) {
+	if i := slices.IndexFunc(m.shown(), func(it *Item) bool { return it.ID == id }); i >= 0 {
+		m.cursor = i
+		return
+	}
+	m.clampCursor()
 }
 
 // toggleFavOnly switches between all the items and the favourites, keeping the cursor on the
@@ -379,10 +500,8 @@ func (m *model) ask(title string, qs []question, done func([]string) string) {
 func (m *model) say(msg string)  { m.status = gui.Line{gui.Strong("✔ "+msg, gui.Amber)} }
 func (m *model) warn(msg string) { m.status = gui.Line{gui.Strong("✘ "+msg, gui.Red)} }
 
-// save writes the vault; if it fails, undo puts back what was changed in memory.
-func (m *model) save(undo func()) bool {
+func (m *model) saveVault() bool {
 	if err := m.vault.save(); err != nil {
-		undo()
 		m.warn("Could not save: " + err.Error())
 		return false
 	}

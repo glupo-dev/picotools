@@ -48,20 +48,30 @@ func (m *model) itemRune(r rune) {
 	if i := slices.Index(itemActions, r); i >= 0 {
 		m.itemCursor = i
 	}
+	if (r == 'e' || r == 'f' || r == 'd') && !m.canChange() {
+		return
+	}
 	switch r {
 	case 'e':
 		m.openEdit(it)
 	case 'r':
 		m.toggleReveal(it.ID)
 	case 'f':
-		it.Favourite = !it.Favourite
-		if m.save(func() { it.Favourite = !it.Favourite }) {
-			if it.Favourite {
+		id, fav := it.ID, !it.Favourite
+		m.apply(func(items []*Item) ([]*Item, error) {
+			i := findItem(items, id)
+			if i < 0 {
+				return nil, errDeletedElsewhere
+			}
+			items[i].Favourite = fav
+			return items, nil
+		}, func() {
+			if fav {
 				m.say("Added to favourites")
 			} else {
 				m.say("Removed from favourites")
 			}
-		}
+		})
 	case 'h':
 		m.histCursor, m.revealed, m.screen = 0, "", screenHistory
 	case 'd':
@@ -127,14 +137,20 @@ func (m *model) deleteKey(k string) {
 			m.backToList()
 			return
 		}
-		before := m.vault.Items
-		m.vault.Items = slices.DeleteFunc(slices.Clone(before), func(x *Item) bool { return x == it })
-		if !m.save(func() { m.vault.Items = before }) {
-			m.screen = screenItem
+		m.screen = screenItem
+		if !m.canChange() {
 			return
 		}
-		m.screen = screenList
-		m.cursor = min(m.cursor, max(len(m.shown())-1, 0))
-		m.say(it.Name + " deleted")
+		id, name := it.ID, it.Name
+		m.apply(func(items []*Item) ([]*Item, error) {
+			// Already deleted on another device: nothing to do (a delete wins, docs 5.2).
+			return slices.DeleteFunc(items, func(x *Item) bool { return x.ID == id }), nil
+		}, func() {
+			if m.screen == screenItem && m.open == id {
+				m.screen = screenList
+			}
+			m.clampCursor()
+			m.say(name + " deleted")
+		})
 	}
 }

@@ -149,43 +149,52 @@ func (m *model) saveEdit() {
 		m.addItem(name, user, pw)
 		return
 	}
-	old := *it
-	old.History = slices.Clone(it.History)
-	it.Name, it.User = name, user
-	if e.changed && pw != it.Password {
-		it.History = append([]OldPassword{{Password: it.Password, Replaced: m.now()}}, it.History...)
-		if len(it.History) > maxHistory {
-			it.History = it.History[:maxHistory]
-		}
-		it.Password = pw
-	}
-	order := slices.Clone(m.vault.Items)
-	sortItems(m.vault.Items)
-	if err := m.vault.save(); err != nil {
-		*it = old
-		m.vault.Items = order
-		e.err = "Could not save: " + err.Error()
+	if !m.canChange() {
 		return
 	}
-	m.edit, m.screen = nil, screenItem
-	m.say(it.Name + " saved")
+	id, changed, now := it.ID, e.changed, m.now()
+	m.apply(func(items []*Item) ([]*Item, error) {
+		i := findItem(items, id)
+		if i < 0 {
+			return nil, errDeletedElsewhere
+		}
+		x := items[i]
+		x.Name, x.User = name, user
+		if changed && pw != x.Password {
+			x.History = append([]OldPassword{{Password: x.Password, Replaced: now}}, x.History...)
+			if len(x.History) > maxHistory {
+				x.History = x.History[:maxHistory]
+			}
+			x.Password = pw
+		}
+		sortItems(items)
+		return items, nil
+	}, func() {
+		if m.screen == screenEdit && m.edit == e {
+			m.edit, m.screen = nil, screenItem
+		}
+		m.say(name + " saved")
+	})
 }
 
 // addItem saves the new item of the page and goes back to the list, on it.
 func (m *model) addItem(name, user, pw string) {
-	it := &Item{ID: newID(), Name: name, User: user, Password: pw}
-	before := m.vault.Items
-	m.vault.Items = append(slices.Clone(before), it)
-	sortItems(m.vault.Items)
-	if err := m.vault.save(); err != nil {
-		m.vault.Items = before
-		m.edit.err = "Could not save: " + err.Error()
+	if !m.canChange() {
 		return
 	}
-	m.edit, m.screen = nil, screenList
-	m.favOnly = false // a new item is not a favourite: show it
-	m.selectItem(it)
-	m.say(it.Name + " added")
+	e, id := m.edit, newID()
+	m.apply(func(items []*Item) ([]*Item, error) {
+		items = append(items, &Item{ID: id, Name: name, User: user, Password: pw})
+		sortItems(items)
+		return items, nil
+	}, func() {
+		if m.screen == screenEdit && m.edit == e {
+			m.edit, m.screen = nil, screenList
+		}
+		m.favOnly = false // a new item is not a favourite: show it
+		m.selectID(id)
+		m.say(name + " added")
+	})
 }
 
 func (m *model) renderEdit() []line {
@@ -234,6 +243,9 @@ func (m *model) renderEdit() []line {
 	lines = append(lines, nil)
 	if e.err != "" {
 		lines = append(lines, line{gui.Strong("✘ "+e.err, gui.Red)}, nil)
+	}
+	if m.status != nil {
+		lines = append(lines, m.status, nil)
 	}
 	hint := "↑↓ move · enter next · esc back"
 	switch e.row {

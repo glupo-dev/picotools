@@ -4,9 +4,11 @@ A new picotools app, **Pico Password**: a place to keep passwords, "a kind of 1P
 author from 2026-11-13; this preliminary analysis was made with the author on 2026-11-14, step by step,
 at a high level, and taken to the screens on 2026-11-15.
 
-**State on 2026-11-15:** the **local app** is built (`cmd/picopassword`, section 9): no sync, no Site
-field, no search. Everything in section 4 marked as built works there and the author tried it on a test
-vault of 120 dummy items. Nothing is committed after the first version of this document.
+**State on 2026-11-15:** the **local app** is built and committed (`cmd/picopassword`, section 9): no
+Site field, no search; the author tried it on a test vault of 120 dummy items. Then the **sync** with
+GitHub and glupo.dev was built the same day (section 5), with its own server `picopassword-server`, tried
+by the tests and against that server on the Mac; **not yet tried by the author**. The server is **on the
+VPS** since 2026-11-15, installed by the author step by step (section 5.1).
 
 Read first, for what is reused: [picoauth-sync.md](picoauth-sync.md) (the vault, the second key, the
 approval of a new device, the GitHub sync) and [picoauth-glupo-sync.md](picoauth-glupo-sync.md) (the
@@ -472,11 +474,32 @@ is made in Pico Password and pasted into the site.
 
 ### 5.1 How
 
+- **Decided** (the author, 2026-11-15): **two completely separate apps**, "quasi sconosciute tra loro":
+  Pico Password has its own server, its own users, tokens and invites, its own GitHub App. They share
+  only the logic (the sync, the invites, the approval), and the code is **copied almost identical** from
+  Pico Auth, not shared (Claude's advice: Pico Auth, in use, is not touched; the price is that a fix
+  goes in two places). This replaces the decision of section 6 (one account for both apps).
 - **Decided.** The same as Pico Auth: GitHub or glupo.dev, the vault encrypted, the second key, a new
   device approved by a linked one with the 6-digit code, Settings, Linked devices, Reset this device.
 - **Decided.** On glupo.dev "exactly as for Pico Auth" (account with user name and invite code, the
   master password is also the account password, the server sees only encrypted data), at
   `https://vault.glupo.dev/picopassword` (the path prefix planned in picoauth-glupo-sync.md 9).
+- **Built:** the GitHub App **Pico Password** (`github.com/apps/pico-password`, created by the author on
+  glupo-dev with the same choices as Pico Auth: Device Flow on, tokens that expire, no webhook, only
+  Contents read and write, any account; Client ID `Iv23lianw0vEJ0ZqhqzT`). The private key GitHub asks
+  before the first installation is still to make.
+- **Built:** **picopassword-server** in `~/Projects/glupo-dev/picopassword-server`, a copy of
+  picoauth-server with its own names: database `picopassword`, port **8687**, service
+  `picopassword-server`, command `picopassword` (invite, invites, revoke), settings
+  `/etc/picopassword/picopassword.env`; the vault file `vault.picopassword`. A local git repository, not
+  committed, not on GitHub. **On the VPS** since 2026-11-15, installed by the author (the author chose
+  to do it, with Claude's commands): system user, role and database `picopassword` (peer access), the
+  package from `deploy/package.sh` with `install.sh`, and in the `vault.glupo.dev` block of Caddy
+  `handle_path /picopassword/*` → `reverse_proxy 127.0.0.1:8687`, before `handle` (copy of before:
+  `/etc/caddy/Caddyfile.prima-di-picopassword`). Checked from the Mac: `/picopassword/health` ok in IPv4
+  and IPv6, `/picoauth/health` still ok. Details in the VPS notes (`~/Projects/glupo-dev/netcup/CLAUDE.md`).
+- The `login_hash` is salted with `picopassword-login:` and the user name, so the same user name and
+  password on the two servers never give the same hash.
 
 ### 5.2 Changes and conflicts
 
@@ -497,12 +520,15 @@ The cases, from the most common:
    contents** (name, user, secret), because items have no id. In Pico Password changing the password is
    the most common change: the PC would look for "Amazon with the old password", not find it, and say
    "the item was deleted on another device", which is false. **Proposed** (consequence, not discussed
-   further): **every item has a hidden id**, so it is found again even when changed. Then:
+   further), **built**: **every item has a hidden id**, so it is found again even when changed. Then:
    - the **same field** changed on both (Mac sets the password `AAA`, PC `BBB`): **the last one wins**
      (`BBB`); nothing breaks, all devices end aligned;
    - **different fields** (Mac the password, PC the favourite): the PC applies again only its own change,
      both stay.
-5. A change on one device, a delete on the other: in Pico Auth the delete wins. **Open** for Pico Password.
+5. A change on one device, a delete on the other: **the delete wins**, as in Pico Auth (decided by the
+   author, 2026-11-15, Claude's advice: the code stays the same, and it is a near impossible case). The
+   device that made the change says "The item was deleted on another device" and its pages of that item
+   close; the new password is still on its screen until then, nowhere else.
 6. For some seconds a device has the old version (change on the Mac, copy at once from the PC): rare;
    trying again after 10 seconds is enough.
 
@@ -523,7 +549,11 @@ su più dispositivi", asked to understand it anyway.
   in, and the conflicts must be handled anyway; a form left open, or a device switched off, keeps the
   signal until it expires (for example 5 minutes); more work on the server and for GitHub.
 
-## 6. One glupo.dev account and one master password for both apps
+## 6. One glupo.dev account and one master password for both apps (replaced)
+
+**Replaced on 2026-11-15** by section 5.1: two separate apps, so **two accounts and two master
+passwords**, one for each app (they may be equal if the user wants). What follows is how the first
+decision was taken, kept for the record.
 
 The question came from how Pico Auth works: **the password of the glupo.dev account is the master
 password of the vault**. With two apps there are two vaults, so either:
@@ -591,22 +621,17 @@ but "sei già sceso troppo nei dettagli". So these are **Proposed**, to take up 
 
 - **Site** field (section 3).
 - **Search** (section 4.7): how, the author's to say.
-- **A change against a delete** of the same item on two devices (section 5.2, case 5).
 - The title "Passwords" and the alphabetical order (section 4.2): built so, not confirmed.
 - **Suggested passwords per device or in the vault** (section 4.12).
 - **The numbers in Settings** (section 4.11).
-- **Master password change** (section 6).
+- **Master password change**: not in Pico Auth either.
 - **Import from 1Password**: without it, the passwords one already has must be typed again by hand.
 - **Lock**: Pico Auth opens by itself on a device; for passwords maybe it should lock after some
   inactivity, as 1Password does.
-- **Sign-up from either app** (section 6, point 3): follows from the author's remark, to confirm.
-- On the server, not discussed: one account for both apps means picoauth-server (or whatever serves
-  `/picopassword`) shares the accounts between the two prefixes; how, to design. It also changes
-  Pico Auth's glupo.dev account, which is in production with the author's test account `gennaro`.
 - **Later, decided:** the fields of the Pico Auth forms editable as here (section 4.9).
 - Everything in section 7.
 
-## 9. Implementation notes (the local app)
+## 9. Implementation notes
 
 Built on 2026-11-15 in `cmd/picopassword`, on the model of `cmd/picoauth` and the lists of `cmd/picodb`:
 
@@ -626,6 +651,24 @@ Built on 2026-11-15 in `cmd/picopassword`, on the model of `cmd/picoauth` and th
   the console now keeps the keyboard focus and accepts `tab` (`KeyTab`). Pico Password no longer uses
   `tab`; the change stays, and the other apps were not tried after it.
 - `build.sh` builds it with the others (`dist/mac/Pico Password.app`, `dist/windows/picopassword.exe`).
-- **The test vault** of the author's machine has 120 dummy items (60 services, each also "lavoro") and a
-  random master password kept only in the keychain: to delete at the end (the vault folder and the
-  keychain entry).
+- **The sync** (2026-11-15), copied from `cmd/picoauth` with the names changed: `github.go`, `glupo.go`,
+  `glupolink.go`, `join.go`, `pair.go`, `computers.go`, `forget.go`, `sync.go`, `save.go`, and their
+  tests `sync_test.go`, `glupo_test.go`, `glupo_real_test.go` (against a real server, only when asked).
+  What differs from Pico Auth:
+  - `vault.go` is Pico Auth's (version 2 with the second key, HKDF info `picopassword vault`), with the
+    items; the keychain service is `picopassword`;
+  - every change (New, Edit, favourite, Delete) goes through `apply` with a function that finds the
+    item **by its id** (`findItem`), so after a conflict it is applied again on the newer vault;
+  - the keys that change the vault are refused while a change is being saved, or when the last check
+    could not reach the server (`offline`, set by the 10-second check and by a failed upload, cleared by
+    the next check that works): the message "No connection to GitHub: you can copy, not change", and on
+    the item page Edit, favourite and Delete are grey (**Proposed**: the keys line of the list stays as
+    it is, since it is all grey already);
+  - an item deleted on another device closes its open pages at the next second;
+  - Settings: `1` Show passwords as, `2` Suggested passwords, then not synced `3` Sync with GitHub, `4`
+    Sync with glupo.dev, `5` Delete this vault; synced `3` Linked devices, `4` Reset this device
+    (**Proposed**: the order); Reset and Delete also remove `prefs.json`;
+  - the first start has `2 Open an existing vault` › From GitHub / From glupo.dev, as Pico Auth;
+  - not copied: clearing the clipboard after 30 seconds (section 7).
+- **The test vault** of the author's machine (120 dummy items, a random master password kept only in the
+  keychain) was deleted on 2026-11-15 with its keychain entry: the next start is New vault.

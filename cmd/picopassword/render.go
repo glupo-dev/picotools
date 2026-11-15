@@ -37,6 +37,12 @@ func (m *model) Render(cols, rows int) []line {
 		lines = append(lines, m.renderEdit()...)
 	case screenForm:
 		lines = append(lines, m.form.render(cols)...)
+	case screenSync:
+		lines = append(lines, m.renderSync()...)
+	case screenApprove:
+		lines = append(lines, m.renderApprove()...)
+	case screenComputers:
+		lines = append(lines, m.renderComputers()...)
 	case screenFatal:
 		if m.fatal != "" {
 			lines = append(lines, line{gui.Strong("✘ "+m.fatal, gui.Red)}, nil)
@@ -64,6 +70,17 @@ func (m *model) entry(key, label string, selected bool) line {
 }
 
 func (m *model) renderStart() []line {
+	if m.startPage == 1 {
+		return append([]line{
+			{gui.Strong("Open an existing vault", nil)},
+			nil,
+			{gui.Plain("  "), gui.Strong("1", gui.Accent), gui.Plain("  From GitHub")},
+			{gui.Colored("     The vault is on GitHub and another device of yours is already linked to it.", gui.Muted)},
+			nil,
+			{gui.Plain("  "), gui.Strong("2", gui.Accent), gui.Plain("  From glupo.dev")},
+			{gui.Colored("     The vault is on glupo.dev and another device of yours is already linked to it.", gui.Muted)},
+		}, m.footer("number choose · esc back")...)
+	}
 	return append([]line{
 		{gui.Strong("Welcome", nil)},
 		{gui.Colored("The passwords are kept in a file encrypted with a master password of your choice.", gui.Muted)},
@@ -71,7 +88,8 @@ func (m *model) renderStart() []line {
 		{gui.Colored("If you lose it, the vault cannot be opened by anyone: write it down somewhere safe.", gui.Muted)},
 		nil,
 		{gui.Plain("  "), gui.Strong("1", gui.Accent), gui.Plain("  New vault")},
-	}, m.footer("1 choose · esc quit")...)
+		{gui.Plain("  "), gui.Strong("2", gui.Accent), gui.Plain("  Open an existing vault")},
+	}, m.footer("number choose · esc quit")...)
 }
 
 // listRoom is how many items fit, exactly as the lists of Pico DB: the window less the logo
@@ -165,7 +183,13 @@ func (m *model) renderItem() []line {
 		nil,
 	}
 	for i, label := range []string{"Edit", favAction, "History", "Delete"} {
-		lines = append(lines, m.entry(string(itemActions[i]), label, i == m.itemCursor))
+		key := string(itemActions[i])
+		if key != "h" && m.changeOff() && i != m.itemCursor {
+			// No connection, or a change being saved: the changes are grey (docs 4.4).
+			lines = append(lines, line{gui.Colored("  "+key+"  "+label, gui.Muted)})
+			continue
+		}
+		lines = append(lines, m.entry(key, label, i == m.itemCursor))
 	}
 	return append(lines, m.footer("↑↓ move · enter choose · r reveal · e edit · f favourite · h history · d delete · esc back")...)
 }
@@ -210,19 +234,34 @@ func (m *model) renderDelete() []line {
 }
 
 func (m *model) renderSettings() []line {
-	return append([]line{
-		{gui.Strong("Settings", nil)},
-		nil,
-		{gui.Plain("  "), gui.Strong("1", gui.Accent), gui.Plain("  Show passwords as:  "), gui.Colored(showChoices[m.showChoice()].label, gui.ValueFg)},
-		{gui.Colored("     How the list hides the passwords, on this device only.", gui.Muted)},
-		nil,
-		{gui.Plain("  "), gui.Strong("2", gui.Accent), gui.Plain("  Suggested passwords:  "),
-			gui.Colored(fmt.Sprintf("strong %d · stronger %d", m.genSpec(false).Length, m.genSpec(true).Length), gui.ValueFg)},
-		{gui.Colored("     How long and with which characters the passwords suggested with ← and → are.", gui.Muted)},
-		nil,
-		{gui.Plain("  "), gui.Strong("3", gui.Accent), gui.Plain("  Delete this vault")},
-		{gui.Colored("     Deletes the vault and its passwords from this device, for ever.", gui.Muted)},
-	}, m.footer("number choose · esc back")...)
+	entry := func(key, label string, value string, note string) []line {
+		l := line{gui.Plain("  "), gui.Strong(key, gui.Accent), gui.Plain("  " + label)}
+		if value != "" {
+			l = append(l, gui.Plain(":  "), gui.Colored(value, gui.ValueFg))
+		}
+		return []line{l, {gui.Colored("     "+note, gui.Muted)}, nil}
+	}
+	lines := []line{{gui.Strong("Settings", nil)}, nil}
+	if m.link != nil {
+		lines = append(lines, m.syncedLine(), nil)
+	}
+	lines = append(lines, entry("1", "Show passwords as", showChoices[m.showChoice()].label,
+		"How the list hides the passwords, on this device only.")...)
+	lines = append(lines, entry("2", "Suggested passwords",
+		fmt.Sprintf("strong %d · stronger %d", m.genSpec(false).Length, m.genSpec(true).Length),
+		"How long and with which characters the passwords suggested with ← and → are.")...)
+	if m.link != nil {
+		lines = append(lines, entry("3", "Linked devices", "", "The devices that have this vault.")...)
+		lines = append(lines, entry("4", "Reset this device", "", "The vault stays on "+m.where()+".")...)
+	} else {
+		lines = append(lines, entry("3", "Sync with GitHub", "",
+			"Put this vault in a private GitHub repository of yours, to have it on your other devices.")...)
+		lines = append(lines, entry("4", "Sync with glupo.dev", "",
+			"Put this vault on glupo.dev with an invite code, to have it on your other devices.")...)
+		lines = append(lines, entry("5", "Delete this vault", "",
+			"Deletes the vault and its passwords from this device, for ever.")...)
+	}
+	return append(lines[:len(lines)-1], m.footer("number choose · esc back")...)
 }
 
 func (m *model) renderShowAs() []line {
